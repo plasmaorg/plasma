@@ -1,0 +1,5 @@
+node_modules/
+.plasma/
+bundle.js
+bundle.js.map
+*.log

@@ -1,0 +1,435 @@
+//! C API (FFI) for Plasma cache
+//!
+//! This module provides a C-compatible API for integrating Plasma into other toolchains.
+//! The API is thread-safe and designed for use in C/C++ applications.
+//!
+//! # Memory Management
+//!
+//! - All strings returned by the API must be freed using `plasma_free_string()`
+//! - Error messages are owned by the caller and must be freed
+//! - Cache handles must be freed using `plasma_cache_free()`
+//!
+//! # Error Handling
+//!
+//! All functions return error codes:
+//! - 0: Success
+//! - Non-zero: Error (use `plasma_last_error()` to get error message)
+
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_int};
+use std::ptr;
+use std::sync::Mutex;
+
+use crate::eviction::EvictionConfig;
+use crate::storage::{FilesystemStorage, Storage};
+
+// Thread-local error storage
+thread_local! {
+    static LAST_ERROR: Mutex<Option<CString>> = const { Mutex::new(None) };
+}
+
+/// Opaque handle to a Plasma cache instance
+#[repr(C)]
+pub struct PlasmaCache {
+    storage: FilesystemStorage,
+}
+
+/// Result codes
+pub const PLASMA_OK: c_int = 0;
+pub const PLASMA_ERROR: c_int = -1;
+pub const PLASMA_ERROR_NOT_FOUND: c_int = -2;
+pub const PLASMA_ERROR_INVALID_HASH: c_int = -3;
+pub const PLASMA_ERROR_IO: c_int = -4;
+
+/// Store an error message in thread-local storage
+fn set_last_error(err: impl std::fmt::Display) {
+    let err_msg = format!("{}", err);
+    if let Ok(c_string) = CString::new(err_msg) {
+        LAST_ERROR.with(|last| {
+            *last.lock().unwrap() = Some(c_string);
+        });
+    }
+}
+
+/// Clear the last error
+fn clear_last_error() {
+    LAST_ERROR.with(|last| {
+        *last.lock().unwrap() = None;
+    });
+}
+
+/// Initialize a new Plasma cache instance
+///
+/// # Arguments
+/// * `cache_dir` - Path to cache directory (NULL-terminated C string)
+///
+/// # Returns
+/// * Pointer to PlasmaCache on success
+/// * NULL on error (use `plasma_last_error()` to get error message)
+///
+/// # Safety
+/// * `cache_dir` must be a valid NULL-terminated C string
+/// * Returned pointer must be freed with `plasma_cache_free()`
+#[no_mangle]
+pub unsafe extern "C" fn plasma_cache_init(cache_dir: *const c_char) -> *mut PlasmaCache {
+    clear_last_error();
+
+    if cache_dir.is_null() {
+        set_last_error("cache_dir is NULL");
+        return ptr::null_mut();
+    }
+
+    let cache_dir_str = match CStr::from_ptr(cache_dir).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(format!("Invalid UTF-8 in cache_dir: {}", e));
+            return ptr::null_mut();
+        }
+    };
+
+    // Use default eviction config (5GB, LFU policy, 7 days TTL)
+    let eviction_config = EvictionConfig::default();
+    match FilesystemStorage::with_eviction(cache_dir_str, Some(eviction_config)) {
+        Ok(storage) => Box::into_raw(Box::new(PlasmaCache { storage })),
+        Err(e) => {
+            set_last_error(format!("Failed to initialize cache: {}", e));
+            ptr::null_mut()
+        }
+    }
+}
+
+/// Initialize a new Plasma cache instance with custom eviction settings
+///
+/// # Arguments
+/// * `cache_dir` - Path to cache directory (NULL-terminated C string)
+/// * `max_size_bytes` - Maximum cache size in bytes (0 for default: 5GB)
+/// * `eviction_policy` - Eviction policy: 0=LRU, 1=LFU, 2=TTL (default: LFU)
+/// * `ttl_seconds` - Default TTL in seconds (0 for default: 7 days)
+///
+/// # Returns
+/// * Pointer to PlasmaCache on success
+/// * NULL on error (use `plasma_last_error()` to get error message)
+///
+/// # Safety
+/// * `cache_dir` must be a valid NULL-terminated C string
+/// * Returned pointer must be freed with `plasma_cache_free()`
+#[no_mangle]
+pub unsafe extern "C" fn plasma_cache_init_with_eviction(
+    cache_dir: *const c_char,
+    max_size_bytes: u64,
+    eviction_policy: c_int,
+    ttl_seconds: u64,
+) -> *mut PlasmaCache {
+    clear_last_error();
+
+    if cache_dir.is_null() {
+        set_last_error("cache_dir is NULL");
+        return ptr::null_mut();
+    }
+
+    let cache_dir_str = match CStr::from_ptr(cache_dir).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(format!("Invalid UTF-8 in cache_dir: {}", e));
+            return ptr::null_mut();
+        }
+    };
+
+    use crate::eviction::EvictionPolicyType;
+
+    let policy = match eviction_policy {
+        0 => EvictionPolicyType::Lru,
+        1 => EvictionPolicyType::Lfu,
+        2 => EvictionPolicyType::Ttl,
+        _ => {
+            set_last_error(format!(
+                "Invalid eviction policy: {}. Must be 0 (LRU), 1 (LFU), or 2 (TTL)",
+                eviction_policy
+            ));
+            return ptr::null_mut();
+        }
+    };
+
+    let eviction_config = EvictionConfig {
+        max_size_bytes: if max_size_bytes == 0 {
+            5 * 1024 * 1024 * 1024
+        } else {
+            max_size_bytes
+        },
+        policy,
+        default_ttl_secs: if ttl_seconds == 0 {
+            7 * 24 * 60 * 60
+        } else {
+            ttl_seconds
+        },
+        ..EvictionConfig::default()
+    };
+
+    match FilesystemStorage::with_eviction(cache_dir_str, Some(eviction_config)) {
+        Ok(storage) => Box::into_raw(Box::new(PlasmaCache { storage })),
+        Err(e) => {
+            set_last_error(format!("Failed to initialize cache: {}", e));
+            ptr::null_mut()
+        }
+    }
+}
+
+/// Free a Plasma cache instance
+///
+/// # Safety
+/// * `cache` must be a valid pointer returned by `plasma_cache_init()`
+/// * Must not be used after calling this function
+#[no_mangle]
+pub unsafe extern "C" fn plasma_cache_free(cache: *mut PlasmaCache) {
+    if !cache.is_null() {
+        let _ = Box::from_raw(cache);
+    }
+}
+
+/// Get an artifact from the cache
+///
+/// # Arguments
+/// * `cache` - Cache instance
+/// * `hash` - Content hash (NULL-terminated C string)
+/// * `output_buffer` - Buffer to write data (must be pre-allocated)
+/// * `buffer_size` - Size of output buffer
+/// * `bytes_written` - Output: actual bytes written
+///
+/// # Returns
+/// * `PLASMA_OK` on success
+/// * `PLASMA_ERROR_NOT_FOUND` if artifact not found
+/// * `PLASMA_ERROR` on other errors
+///
+/// # Safety
+/// * All pointers must be valid
+/// * `output_buffer` must have at least `buffer_size` bytes allocated
+#[no_mangle]
+pub unsafe extern "C" fn plasma_cache_get(
+    cache: *mut PlasmaCache,
+    hash: *const c_char,
+    output_buffer: *mut u8,
+    buffer_size: usize,
+    bytes_written: *mut usize,
+) -> c_int {
+    clear_last_error();
+
+    if cache.is_null() || hash.is_null() || output_buffer.is_null() || bytes_written.is_null() {
+        set_last_error("NULL pointer argument");
+        return PLASMA_ERROR;
+    }
+
+    let cache = &(*cache);
+    let hash_str = match CStr::from_ptr(hash).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(format!("Invalid UTF-8 in hash: {}", e));
+            return PLASMA_ERROR;
+        }
+    };
+
+    match cache.storage.get(hash_str.as_bytes()) {
+        Ok(Some(data)) => {
+            if data.len() > buffer_size {
+                set_last_error(format!(
+                    "Buffer too small: need {} bytes, have {}",
+                    data.len(),
+                    buffer_size
+                ));
+                return PLASMA_ERROR;
+            }
+
+            ptr::copy_nonoverlapping(data.as_ptr(), output_buffer, data.len());
+            *bytes_written = data.len();
+            PLASMA_OK
+        }
+        Ok(None) => {
+            set_last_error(format!("Artifact not found: {}", hash_str));
+            PLASMA_ERROR_NOT_FOUND
+        }
+        Err(e) => {
+            set_last_error(format!("Failed to get artifact: {}", e));
+            PLASMA_ERROR
+        }
+    }
+}
+
+/// Put an artifact into the cache
+///
+/// # Arguments
+/// * `cache` - Cache instance
+/// * `hash` - Content hash (NULL-terminated C string)
+/// * `data` - Data to store
+/// * `data_len` - Length of data in bytes
+///
+/// # Returns
+/// * `PLASMA_OK` on success
+/// * `PLASMA_ERROR` on error
+///
+/// # Safety
+/// * All pointers must be valid
+/// * `data` must have at least `data_len` bytes
+#[no_mangle]
+pub unsafe extern "C" fn plasma_cache_put(
+    cache: *mut PlasmaCache,
+    hash: *const c_char,
+    data: *const u8,
+    data_len: usize,
+) -> c_int {
+    clear_last_error();
+
+    if cache.is_null() || hash.is_null() || data.is_null() {
+        set_last_error("NULL pointer argument");
+        return PLASMA_ERROR;
+    }
+
+    let cache = &(*cache);
+    let hash_str = match CStr::from_ptr(hash).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(format!("Invalid UTF-8 in hash: {}", e));
+            return PLASMA_ERROR;
+        }
+    };
+
+    let data_slice = std::slice::from_raw_parts(data, data_len);
+
+    match cache.storage.put(hash_str.as_bytes(), data_slice) {
+        Ok(_) => PLASMA_OK,
+        Err(e) => {
+            set_last_error(format!("Failed to put artifact: {}", e));
+            PLASMA_ERROR
+        }
+    }
+}
+
+/// Check if an artifact exists in the cache
+///
+/// # Arguments
+/// * `cache` - Cache instance
+/// * `hash` - Content hash (NULL-terminated C string)
+/// * `exists` - Output: 1 if exists, 0 if not
+///
+/// # Returns
+/// * `PLASMA_OK` on success
+/// * `PLASMA_ERROR` on error
+///
+/// # Safety
+/// * All pointers must be valid
+#[no_mangle]
+pub unsafe extern "C" fn plasma_cache_exists(
+    cache: *mut PlasmaCache,
+    hash: *const c_char,
+    exists: *mut c_int,
+) -> c_int {
+    clear_last_error();
+
+    if cache.is_null() || hash.is_null() || exists.is_null() {
+        set_last_error("NULL pointer argument");
+        return PLASMA_ERROR;
+    }
+
+    let cache = &(*cache);
+    let hash_str = match CStr::from_ptr(hash).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(format!("Invalid UTF-8 in hash: {}", e));
+            return PLASMA_ERROR;
+        }
+    };
+
+    match cache.storage.exists(hash_str.as_bytes()) {
+        Ok(result) => {
+            *exists = if result { 1 } else { 0 };
+            PLASMA_OK
+        }
+        Err(e) => {
+            set_last_error(format!("Failed to check existence: {}", e));
+            PLASMA_ERROR
+        }
+    }
+}
+
+/// Delete an artifact from the cache
+///
+/// # Arguments
+/// * `cache` - Cache instance
+/// * `hash` - Content hash (NULL-terminated C string)
+///
+/// # Returns
+/// * `PLASMA_OK` on success
+/// * `PLASMA_ERROR` on error
+///
+/// # Safety
+/// * All pointers must be valid
+#[no_mangle]
+pub unsafe extern "C" fn plasma_cache_delete(
+    cache: *mut PlasmaCache,
+    hash: *const c_char,
+) -> c_int {
+    clear_last_error();
+
+    if cache.is_null() || hash.is_null() {
+        set_last_error("NULL pointer argument");
+        return PLASMA_ERROR;
+    }
+
+    let cache = &(*cache);
+    let hash_str = match CStr::from_ptr(hash).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(format!("Invalid UTF-8 in hash: {}", e));
+            return PLASMA_ERROR;
+        }
+    };
+
+    match cache.storage.delete(hash_str.as_bytes()) {
+        Ok(_) => PLASMA_OK,
+        Err(e) => {
+            set_last_error(format!("Failed to delete artifact: {}", e));
+            PLASMA_ERROR
+        }
+    }
+}
+
+/// Get the last error message
+///
+/// # Returns
+/// * Pointer to NULL-terminated error string
+/// * NULL if no error
+///
+/// # Safety
+/// * Returned string is valid until next API call
+/// * Do not free the returned pointer
+#[no_mangle]
+pub extern "C" fn plasma_last_error() -> *const c_char {
+    LAST_ERROR.with(|last| {
+        last.lock()
+            .unwrap()
+            .as_ref()
+            .map(|s| s.as_ptr())
+            .unwrap_or(ptr::null())
+    })
+}
+
+/// Free a string allocated by the Plasma library
+///
+/// # Safety
+/// * `s` must be a string allocated by a Plasma API function
+#[no_mangle]
+pub unsafe extern "C" fn plasma_free_string(s: *mut c_char) {
+    if !s.is_null() {
+        let _ = CString::from_raw(s);
+    }
+}
+
+/// Get the library version
+///
+/// # Returns
+/// * Pointer to NULL-terminated version string
+///
+/// # Safety
+/// * Returned string is statically allocated, do not free
+#[no_mangle]
+pub extern "C" fn plasma_version() -> *const c_char {
+    concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char
+}

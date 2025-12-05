@@ -1,0 +1,92 @@
+[package]
+name = "plasma"
+version = "1.1.0"
+edition = "2021"
+authors = ["Plasma Team"]
+description = "Multi-layer build cache infrastructure"
+license = "MIT"
+repository = "https://github.com/plasmaorg/plasma"
+
+[lib]
+# Generate both static and dynamic libraries for C FFI
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+chrono = { version = "0.4", features = ["serde"] }
+rocksdb = { version = "0.24", default-features = false, features = ["snappy"] }
+num_cpus = "1.16"
+crossbeam-channel = "0.5"
+sha2 = "0.10"
+hex = "0.4"
+kdl = "6.0"
+glob = "0.3"
+tar = "0.4"
+zstd = "0.13"
+walkdir = "2"
+tempfile = "3"
+tonic = "0.14"
+tonic-prost = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+tokio-stream = "0.1"
+dirs = "6"
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+bytes = "1"
+which = "8"
+# Pin home to avoid edition 2024 requirement
+home = "=0.5.12"
+schlussel = { git = "https://github.com/tuist/schlussel", branch = "main" }
+# OpenSSL vendored for cross-compilation
+openssl = { version = "0.10", features = ["vendored"] }
+# P2P dependencies
+mdns-sd = "0.17"
+notify-rust = "4.11"
+hmac = "0.12"
+hostname = "0.4"
+rand = "0.9"
+# File system watcher for config hot-reload
+notify = "8"
+# Struct diffing for config change detection
+diffo = { version = "0.2", default-features = false }
+# QuickJS runtime for portable recipes
+rquickjs = { git = "https://github.com/DelSkayn/rquickjs.git", features = ["array-buffer", "allocator", "loader", "macro", "futures", "classes"] }
+# LLRT modules for Node.js compatibility
+llrt_utils = { git = "https://github.com/awslabs/llrt", branch = "main", features = ["fs"] }
+llrt_fs = { git = "https://github.com/awslabs/llrt", branch = "main" }
+llrt_child_process = { git = "https://github.com/awslabs/llrt", branch = "main" }
+llrt_buffer = { git = "https://github.com/awslabs/llrt", branch = "main" }
+llrt_path = { git = "https://github.com/awslabs/llrt", branch = "main" }
+llrt_console = { git = "https://github.com/awslabs/llrt", branch = "main" }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", features = ["signal"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["processthreadsapi", "winnt", "handleapi"] }
+
+[dev-dependencies]
+tempfile = "3"
+serial_test = "3"
+assert_cmd = "2"
+predicates = "3"
+uuid = { version = "1", features = ["v4"] }
+rand = "0.9"
+
+[build-dependencies]
+tonic-prost-build = "0.14"
+cbindgen = "0.29"

@@ -1,0 +1,89 @@
+# Xcode Integration
+
+Xcode integration guide for Plasma. This assumes you've already [completed the getting started guide](/getting-started).
+
+## How It Works
+
+Xcode's compilation cache (Xcode 16+) uses a Unix socket for communication with the cache server. Plasma creates a Unix socket when configured via the `[daemon] socket` setting in `plasma.toml`.
+
+## Configuration
+
+Configure the Unix socket path in `plasma.toml`:
+
+```toml
+# plasma.toml
+[cache]
+dir = ".plasma/cache"
+max_size = "20GB"
+
+[daemon]
+socket = ".plasma/xcode.sock"  # Relative to project root
+```
+
+> [!IMPORTANT]
+> When `socket` is configured, the daemon creates **ONLY** the Unix socket server (no HTTP/gRPC TCP servers). This is exclusive to Xcode integration and cannot be combined with other build systems.
+
+## Xcode Project Setup
+
+> [!WARNING]
+> The socket path in Xcode's build settings **must exactly match** the path in `plasma.toml`. Mismatched paths will prevent Xcode from connecting to the cache.
+
+Set these build settings in your Xcode project:
+
+### Option 1: Build Settings
+
+In your project's build settings:
+
+```
+COMPILATION_CACHE_ENABLE_CACHING = YES
+COMPILATION_CACHE_ENABLE_PLUGIN = YES
+COMPILATION_CACHE_REMOTE_SERVICE_PATH = $(SRCROOT)/.plasma/xcode.sock
+```
+
+### Option 2: .xcconfig File
+
+Create or update your `.xcconfig`:
+
+```
+// Build.xcconfig
+COMPILATION_CACHE_ENABLE_CACHING = YES
+COMPILATION_CACHE_ENABLE_PLUGIN = YES
+COMPILATION_CACHE_REMOTE_SERVICE_PATH = $(SRCROOT)/.plasma/xcode.sock
+```
+
+### Option 3: Command Line
+
+Pass settings when calling `xcodebuild`:
+
+```bash
+cd ~/my-xcode-project
+
+xcodebuild \
+  -project MyApp.xcodeproj \
+  -scheme MyApp \
+  COMPILATION_CACHE_ENABLE_CACHING=YES \
+  COMPILATION_CACHE_ENABLE_PLUGIN=YES \
+  COMPILATION_CACHE_REMOTE_SERVICE_PATH=.plasma/xcode.sock
+```
+
+## Quick Start
+
+Once configured, the daemon starts automatically when you navigate to your project:
+
+```bash
+cd ~/my-xcode-project
+# Daemon starts and creates .plasma/xcode.sock
+
+xcodebuild -project MyApp.xcodeproj -scheme MyApp
+# Xcode connects to socket and uses cache
+```
+
+## Gitignore
+
+Add to your `.gitignore`:
+
+```
+.plasma/
+```
+
+This ignores both the cache directory and the socket file.

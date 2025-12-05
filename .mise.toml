@@ -1,0 +1,24 @@
+[settings]
+lockfile = true
+
+[env]
+FNOX_AGE_KEY_FILE = "~/.config/fnox/tuist-plasma-age.txt"
+TIPI_HOME_DIR = "{{config_root}}/.tipi-home"
+_.path = './target/release'
+
+[tools]
+rust = "latest"
+git-cliff = "latest"
+bazel = "9.0.0rc2"  # Includes BAZELRC environment variable support
+gradle = "latest"
+protoc = "33.1"  # Protocol Buffers compiler (supports proto3 optional keyword)
+node = "24.11.1"
+pnpm = "latest"
+fnox = "latest"
+age = "latest"
+java = "21"  # LTS version
+"npm:wrangler" = "latest"
+
+[tasks."docs:deploy-with-secrets"]
+description = "Deploy docs with secrets loaded from fnox"
+run = "fnox run -- mise run docs:deploy"

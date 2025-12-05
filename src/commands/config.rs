@@ -1,0 +1,70 @@
+use anyhow::Result;
+use tracing::info;
+
+use crate::cli::ConfigCommands;
+use crate::config::PlasmaConfig;
+
+pub fn run(command: ConfigCommands) -> Result<()> {
+    match command {
+        ConfigCommands::Validate { path } => validate(&path),
+        ConfigCommands::Generate { template } => generate(&template),
+        ConfigCommands::Show { config } => show(config),
+    }
+}
+
+fn validate(path: &str) -> Result<()> {
+    info!("Validating config file: {}", path);
+
+    let config = PlasmaConfig::from_file(path)?;
+    config.validate()?;
+
+    println!("✓ Configuration file is valid: {}", path);
+    println!("\nSummary:");
+    println!("  - Cache directory: {}", config.cache.dir);
+    println!("  - Max cache size: {}", config.cache.max_size);
+    println!("  - Eviction policy: {}", config.cache.eviction_policy);
+    println!("  - Upstream layers: {}", config.upstream.len());
+
+    for (i, upstream) in config.upstream.iter().enumerate() {
+        println!(
+            "    {}. {} (timeout: {})",
+            i + 1,
+            upstream.url,
+            upstream.timeout
+        );
+    }
+
+    Ok(())
+}
+
+fn generate(template: &str) -> Result<()> {
+    info!("Generating example config for template: {}", template);
+
+    let config_toml = match template {
+        "exec" | "daemon" => PlasmaConfig::example_exec(),
+        "server" => PlasmaConfig::example_server(),
+        _ => {
+            anyhow::bail!(
+                "Unknown template: {}. Valid templates: exec, daemon, server",
+                template
+            );
+        }
+    };
+
+    println!("{}", config_toml);
+
+    Ok(())
+}
+
+fn show(config_path: Option<String>) -> Result<()> {
+    use crate::config_discovery::load_config_with_discovery;
+
+    info!("Showing effective configuration");
+
+    let config = load_config_with_discovery(config_path.as_deref())?.unwrap_or_default();
+
+    println!("Effective Configuration:\n");
+    println!("{}", toml::to_string_pretty(&config)?);
+
+    Ok(())
+}

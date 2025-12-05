@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# GitHub
+.github
+
+# Build artifacts (but NOT Cargo.lock - we need it!)
+target/
+dist/
+*.tar.gz
+*.tar.xz
+*.tar.zst
+*.zip
+*.sha256
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Documentation (we don't need these in the image)
+README.md
+PLAN.md
+CLAUDE.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# CI/CD
+.github/
+
+# Test files (exclude to speed up context transfer)
+tests/
+tmp/
+
+# Development
+.plasma/
+*.log
+
+# Configuration examples
+*.example.toml
+config.toml
+
+# Docker files (don't copy into build context)
+Dockerfile
+.dockerignore
+docker-compose*.yml

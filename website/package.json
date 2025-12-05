@@ -1,0 +1,16 @@
+{
+  "name": "plasma-website",
+  "version": "1.0.0",
+  "description": "Marketing website for Plasma - Multi-Layer Build Cache Infrastructure",
+  "scripts": {
+    "start": "eleventy --serve",
+    "build": "eleventy",
+    "clean": "rm -rf _site"
+  },
+  "keywords": ["plasma", "build-cache", "tuist"],
+  "author": "Plasma",
+  "license": "MIT",
+  "devDependencies": {
+    "@11ty/eleventy": "^3.0.0"
+  }
+}

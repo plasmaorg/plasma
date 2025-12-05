@@ -1,0 +1,72 @@
+# Rust
+/target
+*.pdb
+
+# Plasma cache
+.plasma/
+
+# Release artifacts
+/dist
+
+# Editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Bazel
+bazel-*
+MODULE.bazel.lock
+.bazelrc.user
+
+# Tipi
+.tipi-home/
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.iml
+
+# Nx
+.nx/
+**/dist/
+*.tsbuildinfo
+
+# Created by https://www.toptal.com/developers/gitignore/api/xcode
+# Edit at https://www.toptal.com/developers/gitignore?templates=xcode
+
+### Xcode ###
+## User settings
+xcuserdata/
+
+## Xcode 8 and earlier
+*.xcscmblueprint
+*.xccheckout
+
+### Xcode Patch ###
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+/*.gcno
+**/xcshareddata/WorkspaceSettings.xcsettings
+
+# End of https://www.toptal.com/developers/gitignore/api/xcode
+
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+node_modules/
+package-lock.json
+
+# Recipe test outputs
+generated/
+final/
+coverage/
+output/
