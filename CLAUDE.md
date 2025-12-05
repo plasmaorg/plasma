@@ -259,7 +259,7 @@ url = "https://office-cache.local"      # Try office first (5ms)
 timeout = "5s"
 
 [[upstream]]
-url = "https://cache.tuist.io"          # Fallback to regional (20ms)
+url = "https://cache.example.com"          # Fallback to regional (20ms)
 timeout = "15s"
 
 [[upstream]]
@@ -277,22 +277,22 @@ permanent = true
 ```toml
 # Layer 1 in US (prefers US region)
 [[upstream]]
-url = "https://cache-us-east.tuist.io"  # Primary (low latency)
+url = "https://cache-us-east.example.com"  # Primary (low latency)
 timeout = "10s"
 
 [[upstream]]
-url = "https://cache-eu-west.tuist.io"  # Fallback (high latency)
+url = "https://cache-eu-west.example.com"  # Fallback (high latency)
 timeout = "30s"
 ```
 
 ```toml
 # Layer 1 in EU (reversed priority)
 [[upstream]]
-url = "https://cache-eu-west.tuist.io"  # Primary (low latency)
+url = "https://cache-eu-west.example.com"  # Primary (low latency)
 timeout = "10s"
 
 [[upstream]]
-url = "https://cache-us-east.tuist.io"  # Fallback (high latency)
+url = "https://cache-us-east.example.com"  # Fallback (high latency)
 timeout = "30s"
 ```
 
@@ -301,7 +301,7 @@ timeout = "30s"
 ```toml
 # Layer 1 anywhere in the world (same config)
 [[upstream]]
-url = "https://cache.tuist.io"          # DNS resolves to nearest region
+url = "https://cache.example.com"          # DNS resolves to nearest region
 timeout = "15s"
 
 [[upstream]]
@@ -310,7 +310,7 @@ permanent = true
 ```
 
 **How it works:**
-- Tuist manages GeoDNS for `cache.tuist.io`
+- Tuist manages GeoDNS for `cache.example.com`
 - DNS returns different IPs based on client location
 - Layer 1 doesn't need region-specific configuration
 - Simpler deployment, more scalable
@@ -349,7 +349,7 @@ Each Layer 2 instance is completely independent - no distributed consensus, no c
 
 **Single Region HA (3 instances behind load balancer):**
 ```
-                    DNS: cache-us-east.tuist.io
+                    DNS: cache-us-east.example.com
                               │
                               ▼
                     ┌──────────────────┐
@@ -376,7 +376,7 @@ Each Layer 2 instance is completely independent - no distributed consensus, no c
 ```
 ┌────────────────────────────────┐  ┌────────────────────────────────┐
 │ US Region                      │  │ EU Region                      │
-│ cache-us-east.tuist.io:7070    │  │ cache-eu-west.tuist.io:7070    │
+│ cache-us-east.example.com:7070    │  │ cache-eu-west.example.com:7070    │
 │                                │  │                                │
 │  ┌────────────────┐            │  │  ┌────────────────┐            │
 │  │ RocksDB        │            │  │  │ RocksDB        │            │
@@ -1213,7 +1213,7 @@ When a configuration file is not explicitly specified via `--config`, Plasma aut
 
    # Config overrides
    export PLASMA_CONFIG_CACHE_DIR=/custom/cache
-   export PLASMA_CONFIG_UPSTREAM_0_URL=grpc://cache.tuist.io:7070
+   export PLASMA_CONFIG_UPSTREAM_0_URL=grpc://cache.example.com:443
 
    plasma daemon  # Uses env vars
    ```
@@ -1732,7 +1732,7 @@ Each daemon loads its authentication token from the project's config:
 dir = ".plasma/cache"
 
 [[upstream]]
-url = "grpc://cache.tuist.io:7070"
+url = "grpc://cache.example.com:443"
 
 [auth]
 token_file = ".plasma.token"  # Gitignored, per-developer
@@ -1859,7 +1859,7 @@ Configuration file values can be overridden using the `PLASMA_CONFIG_*` prefix:
 | `cache.dir` | `PLASMA_CONFIG_CACHE_DIR` | `/tmp/plasma-cache` |
 | `cache.max_size` | `PLASMA_CONFIG_CACHE_MAX_SIZE` | `10GB` |
 | `cache.eviction_policy` | `PLASMA_CONFIG_CACHE_EVICTION_POLICY` | `lfu` |
-| `upstream[0].url` | `PLASMA_CONFIG_UPSTREAM_0_URL` | `grpc://cache.tuist.io:7070` |
+| `upstream[0].url` | `PLASMA_CONFIG_UPSTREAM_0_URL` | `grpc://cache.example.com:443` |
 | `upstream[0].timeout` | `PLASMA_CONFIG_UPSTREAM_0_TIMEOUT` | `30s` |
 | `auth.token` | `PLASMA_CONFIG_AUTH_TOKEN` | `eyJ0eXAi...` |
 | `observability.log_level` | `PLASMA_CONFIG_OBSERVABILITY_LOG_LEVEL` | `debug` |
@@ -1898,7 +1898,7 @@ Plasma respects standard environment variables where applicable:
 # Configuration overrides
 export PLASMA_CONFIG_CACHE_DIR=/custom/cache
 export PLASMA_CONFIG_CACHE_MAX_SIZE=20GB
-export PLASMA_CONFIG_UPSTREAM_0_URL=grpc://cache.tuist.io:7070
+export PLASMA_CONFIG_UPSTREAM_0_URL=grpc://cache.example.com:443
 export PLASMA_CONFIG_AUTH_TOKEN=eyJ0eXAi...
 
 # Runtime flags
@@ -1986,7 +1986,7 @@ dir = "/mnt/build-cache"
 max_size = "20GB"
 
 [[upstream]]
-url = "grpc://cache-us-east.tuist.io:7070"  # Plasma protocol
+url = "grpc://cache-us-east.example.com:7070"  # Plasma protocol
 timeout = "30s"
 
 [build_systems.bazel]
@@ -2006,7 +2006,7 @@ dir = ".plasma/cache"
 max_size = "5GB"
 
 [[upstream]]
-url = "grpc://cache.tuist.io:7070"  # Plasma protocol
+url = "grpc://cache.example.com:443"  # Plasma protocol
 timeout = "30s"
 
 [build_systems.bazel]

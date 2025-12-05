@@ -86,7 +86,7 @@ plasma init --non-interactive
 plasma init --non-interactive \
   --cache-dir /tmp/cache \
   --max-cache-size 10GB \
-  --upstream-url grpc://cache.tuist.io:7070
+  --upstream-url grpc://cache.example.com:443
 ```
 
 **What it does:**
@@ -105,7 +105,7 @@ plasma init --non-interactive \
 Cache directory [.plasma/cache]:
 Max cache size [5GB]:
 Do you have a remote cache server? [y/N]
-Remote cache URL (e.g., grpc://cache.tuist.io:7070):
+Remote cache URL (e.g., grpc://cache.example.com:443):
 ```
 
 ---
@@ -288,7 +288,7 @@ plasma health [OPTIONS]
 plasma health --url http://127.0.0.1:54321
 
 # Check remote server
-plasma health --url https://cache.tuist.io --timeout 10s
+plasma health --url https://cache.example.com --timeout 10s
 
 # JSON output
 plasma health --url http://127.0.0.1:54321 --format json
@@ -309,7 +309,7 @@ eviction_policy = "lfu"  # lru, lfu, or ttl
 
 # Upstream caches (optional)
 [[upstream]]
-url = "grpc://cache.tuist.io:7070"
+url = "grpc://cache.example.com:443"
 timeout = "30s"
 
 # Authentication (optional)

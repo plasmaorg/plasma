@@ -54,9 +54,7 @@ That's it! Your builds will now use the cache automatically.
 
 ## 📚 Documentation
 
-**Full documentation is available at: [https://plasma.tuist.dev](https://plasma.tuist.dev)**
-
-Or read locally:
+Read the docs:
 - [Getting Started Guide](./docs/getting-started.md)
 - [Build System Integration](./docs/build-systems/)
 - [CLI Reference](./docs/reference/cli.md)
@@ -82,6 +80,3 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and guidelines.
 
 MPL-2.0 - See [LICENSE.md](./LICENSE.md) for details.
 
-## 🔗 Related Projects
-
-- [Tuist](https://tuist.dev) - Managed Plasma infrastructure as a service

@@ -8,7 +8,7 @@ use crate::config_expansion;
 /// Complete Plasma configuration (loaded from TOML file)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PlasmaConfig {
-    /// Service URL (e.g., "https://tuist.dev") - used for authentication, service discovery, etc.
+    /// Service URL (e.g., "https://example.com") - used for authentication, service discovery, etc.
     #[serde(default)]
     pub url: Option<String>,
 

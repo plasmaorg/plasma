@@ -18,7 +18,7 @@ Plasma automatically detects which authentication method to use based on what's 
 
 ```toml
 # plasma.toml (works everywhere!)
-url = "https://tuist.dev"
+url = "https://example.com"
 
 [auth]
 # No provider needed - auto-detects!
@@ -131,7 +131,7 @@ Secure authentication with automatic token refresh. Best for interactive use and
 
 ```toml
 # Service URL (used for OAuth2, service discovery, etc.)
-url = "https://tuist.dev"
+url = "https://example.com"
 
 [auth]
 # No provider needed - auto-detects OAuth2 after login!
@@ -148,9 +148,9 @@ storage = "file"  # or "keychain" or "memory"
 # url = "https://custom-auth.example.com"
 
 # Optional: Custom endpoints (defaults use url)
-# authorization_endpoint = "https://tuist.dev/oauth/authorize"
-# token_endpoint = "https://tuist.dev/oauth/token"
-# device_authorization_endpoint = "https://tuist.dev/oauth/device/code"
+# authorization_endpoint = "https://example.com/oauth/authorize"
+# token_endpoint = "https://example.com/oauth/token"
+# device_authorization_endpoint = "https://example.com/oauth/device/code"
 ```
 
 #### Storage Backends
@@ -176,7 +176,7 @@ plasma auth login --config .plasma.toml
 **Output:**
 ```
 [plasma] Starting OAuth2 device code flow
-[plasma] Please visit: https://tuist.dev/activate
+[plasma] Please visit: https://example.com/activate
 [plasma] Enter code: ABCD-EFGH
 [plasma] Waiting for authorization...
 ✓ Successfully authenticated!

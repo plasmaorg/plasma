@@ -52,7 +52,7 @@ pub fn run(args: InitArgs) -> Result<()> {
 
         if input.trim().eq_ignore_ascii_case("y") {
             Some(prompt(
-                "Remote cache URL (e.g., grpc://cache.tuist.io:7070)",
+                "Remote cache URL (e.g., grpc://cache.example.com:443)",
             )?)
         } else {
             None
