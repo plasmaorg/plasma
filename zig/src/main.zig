@@ -8,8 +8,15 @@ const builtin = @import("builtin");
 const platform = @import("platform.zig");
 const version = @import("version.zig");
 
-// Re-export WASM functions so they're included in the binary
-pub const exports = @import("exports.zig");
+// Force WASM exports to be included in the binary.
+// Using comptime block ensures the linker doesn't optimize them out.
+const exports = @import("exports.zig");
+comptime {
+    _ = &exports.plasma_init;
+    _ = &exports.plasma_version;
+    _ = &exports.plasma_health;
+    _ = &exports.plasma_version_len;
+}
 
 pub fn main() void {
     if (!platform.is_wasm) {
@@ -18,7 +25,10 @@ pub fn main() void {
 }
 
 fn runNative() void {
-    const stdout = std.io.getStdOut().writer();
+    // Zig 0.15 requires explicit buffer management for writers.
+    // Using unbuffered output (empty slice) for direct OS writes.
+    var writer = std.fs.File.stdout().writer(&.{});
+    const stdout = &writer.interface;
 
     stdout.print("[plasma] Plasma v{s}\n", .{version.VERSION}) catch {};
     stdout.print("[plasma] Build target: {s}\n", .{version.BUILD_TARGET}) catch {};
@@ -41,7 +51,7 @@ fn runNative() void {
     }
 }
 
-fn printHelp(writer: anytype) void {
+fn printHelp(writer: *std.Io.Writer) void {
     const help =
         \\Usage: plasma [COMMAND] [OPTIONS]
         \\

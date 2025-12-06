@@ -8,7 +8,7 @@ _.path = ['./target/release', './zig/zig-out/bin']
 
 [tools]
 rust = "latest"
-zig = "0.14.0"  # Latest stable - excellent WASM support
+zig = "0.15.1"
 git-cliff = "latest"
 bazel = "9.0.0rc2"  # Includes BAZELRC environment variable support
 gradle = "latest"

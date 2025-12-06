@@ -1,7 +1,7 @@
 //! WASM exports for JavaScript interop.
 //!
 //! Functions in this module are exported to JavaScript when compiling to WASM.
-//! They use C calling convention for compatibility.
+//! The `export` keyword automatically applies the correct calling convention.
 
 const version = @import("version.zig");
 const platform = @import("platform.zig");
@@ -9,7 +9,7 @@ const platform = @import("platform.zig");
 extern "env" fn js_log(ptr: [*]const u8, len: usize) void;
 
 /// Initialize Plasma. Returns 0 on success.
-export fn plasma_init() callconv(.C) i32 {
+pub export fn plasma_init() i32 {
     if (platform.is_wasm) {
         const msg1 = "[plasma] Plasma v" ++ version.VERSION ++ " initialized";
         const msg2 = "[plasma] Build target: " ++ version.BUILD_TARGET;
@@ -22,16 +22,16 @@ export fn plasma_init() callconv(.C) i32 {
 }
 
 /// Get null-terminated version string.
-export fn plasma_version() callconv(.C) [*:0]const u8 {
+pub export fn plasma_version() [*:0]const u8 {
     return version.VERSION ++ "\x00";
 }
 
 /// Health check. Returns 1 if healthy.
-export fn plasma_health() callconv(.C) i32 {
+pub export fn plasma_health() i32 {
     return 1;
 }
 
 /// Get version string length.
-export fn plasma_version_len() callconv(.C) usize {
+pub export fn plasma_version_len() usize {
     return version.VERSION.len;
 }

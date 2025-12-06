@@ -9,11 +9,14 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Native executable
-    const exe = b.addExecutable(.{
-        .name = "plasma",
+    const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    const exe = b.addExecutable(.{
+        .name = "plasma",
+        .root_module = exe_mod,
     });
     b.installArtifact(exe);
 
@@ -27,17 +30,26 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     // WASM target
-    const wasm = b.addExecutable(.{
-        .name = "plasma",
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+    const wasm_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
-        .target = b.resolveTargetQuery(.{
-            .cpu_arch = .wasm32,
-            .os_tag = .freestanding,
-        }),
+        .target = wasm_target,
         .optimize = .ReleaseSmall,
     });
+    const wasm = b.addExecutable(.{
+        .name = "plasma",
+        .root_module = wasm_mod,
+    });
     wasm.entry = .disabled;
-    wasm.rdynamic = true;
+    wasm.root_module.export_symbol_names = &.{
+        "plasma_init",
+        "plasma_version",
+        "plasma_health",
+        "plasma_version_len",
+    };
 
     const wasm_install = b.addInstallArtifact(wasm, .{
         .dest_dir = .{ .override = .{ .custom = "wasm" } },
@@ -46,10 +58,13 @@ pub fn build(b: *std.Build) void {
     wasm_step.dependOn(&wasm_install.step);
 
     // Tests
-    const unit_tests = b.addTest(.{
+    const test_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    const unit_tests = b.addTest(.{
+        .root_module = test_mod,
     });
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
