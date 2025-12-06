@@ -9,10 +9,10 @@ pub mod config;
 pub mod config_discovery;
 pub mod config_expansion; // Environment variable expansion for config files
 pub mod eviction; // Cache eviction policies (LRU, LFU, TTL)
-pub mod plasma_protocol; // Plasma gRPC protocol (Layer 1 <-> Layer 2 communication)
 pub mod hot_reload; // Hot-reload support for configuration
 pub mod logging;
 pub mod p2p; // P2P cache sharing
+pub mod plasma_protocol; // Plasma gRPC protocol (Layer 1 <-> Layer 2 communication)
 pub mod recipe; // Script recipes with content-addressed caching (bash, node, python, etc.)
 pub mod recipe_portable; // Portable recipes executed in Plasma's embedded JS runtime
 pub mod storage;
