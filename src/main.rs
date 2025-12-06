@@ -8,12 +8,12 @@ mod config;
 mod config_discovery;
 mod config_expansion; // Environment variable expansion for config files
 mod eviction; // Cache eviction policies (LRU, LFU, TTL)
-mod plasma_protocol; // Plasma gRPC protocol (Layer 1 <-> Layer 2 communication)
 mod hot_reload; // Hot-reload support for configuration
 mod http;
 mod logging;
 mod merger;
 mod p2p; // P2P cache sharing
+mod plasma_protocol; // Plasma gRPC protocol (Layer 1 <-> Layer 2 communication)
 mod recipe; // Standard recipes (script caching with KDL annotations)
 mod recipe_portable; // Portable recipes (QuickJS/JavaScript)
 mod storage;

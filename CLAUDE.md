@@ -2150,6 +2150,45 @@ plasma config show --config config.toml --config-upstream s3://override
 - Use `clippy` for linting (zero warnings policy)
 - Prioritize safety, idiomatic patterns, and zero-cost abstractions
 
+### Zig Conventions
+
+The Zig implementation lives in the `zig/` directory and will eventually replace the Rust implementation.
+
+**Code Organization:**
+- Keep files small and focused (avoid monolith files)
+- One concept per file (e.g., `platform.zig`, `version.zig`, `exports.zig`)
+- Use `//!` doc comments at the top of files to describe the module's purpose
+- Group related functionality into subdirectories (e.g., `storage/`, `http/`, `auth/`)
+
+**Documentation Style:**
+- Use `///` for public API documentation
+- Use `//!` for module-level documentation
+- Keep documentation concise and focused on what/why, not how
+- Educational comments about Zig features belong in PR descriptions, not in code
+
+**Build and Test:**
+- `zig build` - Build native executable
+- `zig build wasm` - Build WASM module
+- `zig build test` - Run tests
+- `zig build run` - Build and run
+- `zig fmt src/` - Format code
+
+**Platform Abstraction:**
+- Use `platform.zig` for compile-time platform detection
+- WASM exports go in `exports.zig`
+- Avoid `std.debug.print` for WASM compatibility; use platform-aware logging
+- Compile-time branching with `if (platform.is_wasm)` excludes code from wrong target
+
+**Error Handling:**
+- Use error unions (`!T`) for functions that can fail
+- Prefer `try` over manual error handling where appropriate
+- Create domain-specific error sets (e.g., `StorageError`, `AuthError`)
+
+**Memory Management:**
+- Always pass allocators explicitly
+- Use `defer` for cleanup
+- Prefer arena allocators for request-scoped allocations
+
 ### Logging Conventions
 - Use the `tracing` crate (`info!`, `debug!`, `warn!`, `error!`) for all logging
 - **Do NOT add `[plasma]` prefix to log messages** - the custom `PlasmaFormatter` in `src/logging.rs` automatically adds `(plasma)` to all log output

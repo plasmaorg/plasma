@@ -1,0 +1,60 @@
+name: Zig
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'zig/**'
+      - '.github/workflows/zig.yml'
+  pull_request:
+    paths:
+      - 'zig/**'
+      - '.github/workflows/zig.yml'
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Check formatting
+        working-directory: zig
+        run: zig fmt --check src/
+
+  build-native:
+    name: Build Native
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Build
+        working-directory: zig
+        run: zig build
+
+  build-wasm:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Build WASM
+        working-directory: zig
+        run: zig build wasm
+
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Run tests
+        working-directory: zig
+        run: zig build test

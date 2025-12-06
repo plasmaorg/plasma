@@ -8,10 +8,10 @@ use tracing::info;
 
 use crate::cli::ServerArgs;
 use crate::eviction::{spawn_background_eviction, BackgroundEvictionConfig, EvictionConfig};
-use crate::plasma_protocol::proto::plasma_cache_server::PlasmaCacheServer;
-use crate::plasma_protocol::PlasmaCacheService;
 use crate::hot_reload::HotReloadManager;
 use crate::merger::MergedServerConfig;
+use crate::plasma_protocol::proto::plasma_cache_server::PlasmaCacheServer;
+use crate::plasma_protocol::PlasmaCacheService;
 use crate::storage::FilesystemStorage;
 use crate::xcode::proto::cas::casdb_service_server::CasdbServiceServer;
 use crate::xcode::proto::keyvalue::key_value_db_server::KeyValueDbServer;

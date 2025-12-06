@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plasma WASM Test</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --fg: #eaeaea;
+            --accent: #4ecdc4;
+            --success: #2ecc71;
+            --error: #e74c3c;
+            --code-bg: #16213e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 2rem;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+
+        .status.loading {
+            background: rgba(241, 196, 15, 0.2);
+            color: #f1c40f;
+        }
+
+        .status.ready {
+            background: rgba(46, 204, 113, 0.2);
+            color: var(--success);
+        }
+
+        .status.error {
+            background: rgba(231, 76, 60, 0.2);
+            color: var(--error);
+        }
+
+        .card {
+            background: var(--code-bg);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .card h2 {
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #888;
+        }
+
+        .info-value {
+            color: var(--fg);
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        .console {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.875rem;
+            height: 200px;
+            overflow-y: auto;
+        }
+
+        .console-line {
+            padding: 0.25rem 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .console-line.info {
+            color: var(--accent);
+        }
+
+        .console-line.success {
+            color: var(--success);
+        }
+
+        .console-line.error {
+            color: var(--error);
+        }
+
+        .buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        button {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .note {
+            background: rgba(78, 205, 196, 0.1);
+            border-left: 3px solid var(--accent);
+            padding: 1rem;
+            border-radius: 0 4px 4px 0;
+            margin-top: 2rem;
+            font-size: 0.875rem;
+        }
+
+        .note h3 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Plasma WASM Test</h1>
+        <p class="subtitle">Testing Zig WebAssembly module in the browser</p>
+
+        <div id="status" class="status loading">
+            <span id="status-icon">&#9679;</span>
+            <span id="status-text">Loading WASM module...</span>
+        </div>
+
+        <div class="card">
+            <h2>Module Information</h2>
+            <div class="info-row">
+                <span class="info-label">Version</span>
+                <span class="info-value" id="version">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Build Target</span>
+                <span class="info-value" id="build-target">wasm32-freestanding</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Health Status</span>
+                <span class="info-value" id="health">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">WASM Size</span>
+                <span class="info-value" id="wasm-size">-</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Console Output</h2>
+            <div class="console" id="console"></div>
+            <div class="buttons">
+                <button id="btn-init" disabled>Call plasma_init()</button>
+                <button id="btn-health" disabled>Call plasma_health()</button>
+                <button id="btn-clear">Clear Console</button>
+            </div>
+        </div>
+
+        <div class="note">
+            <h3>How It Works</h3>
+            <p>
+                This page loads the Plasma WASM module compiled from Zig source code.
+                The same Zig code compiles to both native binaries and this WebAssembly module.
+                Click the buttons above to call exported functions and see the results.
+            </p>
+        </div>
+    </div>
+
+    <script type="module">
+        /**
+         * Plasma WASM Loader
+         *
+         * This script demonstrates how to:
+         * 1. Load a Zig-compiled WASM module
+         * 2. Provide JavaScript functions that Zig can call (imports)
+         * 3. Call exported Zig functions from JavaScript
+         * 4. Handle memory/string interop between JS and WASM
+         */
+
+        // Console output helper
+        const consoleEl = document.getElementById('console');
+        function log(message, type = 'info') {
+            const line = document.createElement('div');
+            line.className = `console-line ${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleEl.appendChild(line);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        // Update status display
+        function setStatus(status, text) {
+            const statusEl = document.getElementById('status');
+            const textEl = document.getElementById('status-text');
+            statusEl.className = `status ${status}`;
+            textEl.textContent = text;
+        }
+
+        // WASM module instance (will be set after loading)
+        let wasmInstance = null;
+        let wasmMemory = null;
+
+        /**
+         * Read a string from WASM memory
+         *
+         * WASM only supports numbers, so strings are passed as (pointer, length).
+         * We need to read the bytes from WASM memory and decode them as UTF-8.
+         */
+        function readString(ptr, len) {
+            const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
+            return new TextDecoder().decode(bytes);
+        }
+
+        /**
+         * Read a null-terminated string from WASM memory
+         */
+        function readCString(ptr) {
+            const bytes = new Uint8Array(wasmMemory.buffer, ptr);
+            let len = 0;
+            while (bytes[len] !== 0 && len < 1000) len++;
+            return new TextDecoder().decode(bytes.slice(0, len));
+        }
+
+        /**
+         * Import functions that Zig can call
+         *
+         * These match the `extern "env"` declarations in main.zig.
+         * When Zig calls js_log(), it will execute this JavaScript function.
+         */
+        const importObject = {
+            env: {
+                // Called by Zig to log messages
+                js_log: (ptr, len) => {
+                    const message = readString(ptr, len);
+                    log(message, 'info');
+                    console.log('[plasma/wasm]', message);
+                }
+            }
+        };
+
+        /**
+         * Load and initialize the WASM module
+         */
+        async function loadWasm() {
+            try {
+                log('Fetching plasma.wasm...', 'info');
+
+                // Fetch the WASM binary
+                const response = await fetch('../zig-out/wasm/plasma.wasm');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch WASM: ${response.status}`);
+                }
+
+                const wasmBytes = await response.arrayBuffer();
+                document.getElementById('wasm-size').textContent =
+                    `${wasmBytes.byteLength} bytes`;
+
+                log(`Loaded ${wasmBytes.byteLength} bytes`, 'info');
+                log('Instantiating WebAssembly module...', 'info');
+
+                // Compile and instantiate the WASM module
+                // We pass importObject to provide the js_log function
+                const result = await WebAssembly.instantiate(wasmBytes, importObject);
+
+                wasmInstance = result.instance;
+                wasmMemory = wasmInstance.exports.memory;
+
+                log('WASM module instantiated successfully!', 'success');
+
+                // Get version from exported function
+                const versionPtr = wasmInstance.exports.plasma_version();
+                const version = readCString(versionPtr);
+                document.getElementById('version').textContent = version;
+                log(`Version: ${version}`, 'info');
+
+                // Check health
+                const health = wasmInstance.exports.plasma_health();
+                document.getElementById('health').textContent =
+                    health === 1 ? 'Healthy' : 'Unhealthy';
+                log(`Health check: ${health === 1 ? 'OK' : 'FAILED'}`,
+                    health === 1 ? 'success' : 'error');
+
+                // Update UI
+                setStatus('ready', 'WASM module loaded and ready!');
+                document.getElementById('btn-init').disabled = false;
+                document.getElementById('btn-health').disabled = false;
+
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                setStatus('error', `Failed to load: ${error.message}`);
+                console.error('WASM load error:', error);
+            }
+        }
+
+        // Button handlers
+        document.getElementById('btn-init').addEventListener('click', () => {
+            if (!wasmInstance) return;
+            log('Calling plasma_init()...', 'info');
+            const result = wasmInstance.exports.plasma_init();
+            log(`plasma_init() returned: ${result}`, result === 0 ? 'success' : 'error');
+        });
+
+        document.getElementById('btn-health').addEventListener('click', () => {
+            if (!wasmInstance) return;
+            log('Calling plasma_health()...', 'info');
+            const result = wasmInstance.exports.plasma_health();
+            log(`plasma_health() returned: ${result} (${result === 1 ? 'healthy' : 'unhealthy'})`,
+                result === 1 ? 'success' : 'error');
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            consoleEl.innerHTML = '';
+            log('Console cleared', 'info');
+        });
+
+        // Start loading
+        loadWasm();
+    </script>
+</body>
+</html>

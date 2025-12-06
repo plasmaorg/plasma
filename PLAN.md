@@ -1,491 +1,1091 @@
-# Plasma Implementation Plan
+# Plasma Implementation Plan - Zig Migration
 
-> **Status**: In Progress
-> **Last Updated**: 2025-10-23
-> **Current Phase**: Phase 0 - Project Setup (In Progress)
+> **Status**: Migration In Progress
+> **Last Updated**: 2025-12-06
+> **Current Phase**: Phase 0 - Zig Hello World
+> **Target**: Full rewrite in Zig with WASM/browser support
 
-This document tracks the implementation roadmap for Plasma. Update this file as phases complete and requirements evolve.
+This document tracks the migration from Rust to Zig. Each phase is designed as a single PR that teaches specific Zig concepts while building toward the complete system.
 
 ---
 
-## Phase 0: Project Setup & Foundation
+## Migration Overview
 
-**Goal**: Bootstrap the Rust project with essential infrastructure
+### Why Zig?
+
+1. **WASM-first design**: Zig has first-class WASM support with `zig build -Dtarget=wasm32-wasi`
+2. **No hidden control flow**: Explicit allocators make WASM memory management predictable
+3. **C interop**: Can reuse existing C libraries or expose C API easily
+4. **Comptime**: Powerful compile-time execution for protocol generation
+5. **Small binaries**: Important for browser delivery
+
+### WASM Considerations
+
+The browser environment has significant constraints that affect architecture:
+
+| Feature | Native | WASM/Browser |
+|---------|--------|--------------|
+| File System | Full access | IndexedDB / Origin Private FS |
+| Networking | TCP/UDP sockets | Fetch API only |
+| Threads | Native threads | Web Workers |
+| gRPC | Native tonic | gRPC-Web via HTTP |
+| Storage | RocksDB | IndexedDB wrapper |
+| Crypto | OpenSSL/native | WebCrypto API |
+
+**Strategy**: Build abstraction layers from day one that compile to different backends.
+
+---
+
+## Phase 0: Zig Hello World & Project Setup
+
+**Goal**: Bootstrap Zig project, compile to native + WASM, verify browser execution
+
+**Zig Concepts to Learn**:
+- `build.zig` - Zig's build system (replaces Cargo.toml + build.rs)
+- Cross-compilation targets
+- Basic syntax: functions, variables, imports
+- `std.debug.print` for output
 
 ### Tasks
-- [x] Initialize Rust project with Cargo
-- [x] Add mise configuration for Rust toolchain
-- [x] Create CLI with clap (basic help menu and server command structure)
-- [x] Create basic README with build/run instructions
-- [x] Configure CI/CD pipeline (GitHub Actions)
-  - [x] `cargo fmt` check
-  - [x] `cargo clippy` with zero warnings
-  - [x] `cargo test`
-  - [x] `cargo build --release`
-  - [x] Automated releases with git-cliff
-  - [x] Multi-platform binary builds (Linux, macOS, Windows)
-  - [x] SHA256 checksums generation
-- [ ] Set up project structure (modules: cache, storage, auth, server, config)
-- [ ] Set up development tools
-  - [ ] `.editorconfig` or similar
-  - [ ] Pre-commit hooks (optional)
-- [ ] Add license file (if applicable)
 
-**Dependencies added**:
-```toml
-[dependencies]
-clap = { version = "4", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+- [ ] Install Zig via mise (add to `.mise.toml`)
+- [ ] Create `build.zig` with native + WASM targets
+- [ ] Create `src/main.zig` with "Hello, Plasma!"
+- [ ] Compile to native: `zig build`
+- [ ] Compile to WASM: `zig build -Dtarget=wasm32-freestanding`
+- [ ] Create `wasm-test/index.html` to load and run WASM
+- [ ] Verify WASM runs in browser (console.log output)
+- [ ] Set up GitHub Actions for Zig CI
+  - [ ] `zig fmt` check
+  - [ ] `zig build` native
+  - [ ] `zig build` WASM
+  - [ ] `zig build test`
+
+**Example `build.zig`**:
+```zig
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    // Native target (default)
+    const native_target = b.standardTargetOptions(.{});
+    const native_optimize = b.standardOptimizeOption(.{});
+
+    const exe = b.addExecutable(.{
+        .name = "plasma",
+        .root_source_file = b.path("src/main.zig"),
+        .target = native_target,
+        .optimize = native_optimize,
+    });
+    b.installArtifact(exe);
+
+    // WASM target for browsers
+    const wasm = b.addExecutable(.{
+        .name = "plasma",
+        .root_source_file = b.path("src/main.zig"),
+        .target = b.resolveTargetQuery(.{
+            .cpu_arch = .wasm32,
+            .os_tag = .freestanding,
+        }),
+        .optimize = .ReleaseSmall,
+    });
+    wasm.entry = .disabled;
+    wasm.rdynamic = true;
+
+    const wasm_install = b.addInstallArtifact(wasm, .{
+        .dest_dir = .{ .custom = "wasm" },
+    });
+
+    const wasm_step = b.step("wasm", "Build WASM target");
+    wasm_step.dependOn(&wasm_install.step);
+}
 ```
 
-**Progress**: Basic CLI structure complete and compiles successfully. Server command accepts all planned configuration flags.
-
-**Deliverable**: Buildable Rust project with CI passing
+**Deliverable**: Binary runs on native + WASM loads in browser
 
 ---
 
-## Phase 1: Configuration System
+## Phase 1: Error Handling & Result Types
 
-**Goal**: Implement flexible configuration with precedence (CLI > env > file)
+**Goal**: Implement Zig error handling patterns, create foundational error types
+
+**Zig Concepts to Learn**:
+- Error sets and error unions (`!T`)
+- `try`, `catch`, `errdefer`
+- Optional types (`?T`)
+- `orelse` and `if (x) |value|` patterns
 
 ### Tasks
-- [ ] Define configuration schema (struct)
-  - [ ] Storage backend selection (rocksdb, s3)
-  - [ ] RocksDB options (path, max size)
-  - [ ] S3 options (bucket, prefix, region)
-  - [ ] Upstream URL (for layer fallback)
-  - [ ] JWT public key path or JWKS URL
-  - [ ] Server options (HTTP port, gRPC port, metrics port)
-- [ ] Implement CLI argument parsing (`clap` crate)
-- [ ] Implement environment variable parsing
-- [ ] Implement config file parsing (TOML or YAML)
-- [ ] Implement precedence logic (merge CLI > env > file)
-- [ ] Add validation for required fields
-- [ ] Write unit tests for configuration merging
-- [ ] Document configuration options in README
 
-**Dependencies**:
-```toml
-clap = { version = "4", features = ["derive"] }
-config = "0.14"  # or similar for file parsing
+- [ ] Create `src/errors.zig` with Plasma error set
+- [ ] Implement `PlasmaError` error set (ConfigError, StorageError, AuthError, etc.)
+- [ ] Create helper functions for error formatting
+- [ ] Write tests for error handling patterns
+- [ ] Document Zig vs Rust error handling differences
+
+**Example**:
+```zig
+pub const PlasmaError = error{
+    ConfigNotFound,
+    ConfigParseError,
+    StorageReadError,
+    StorageWriteError,
+    AuthTokenExpired,
+    AuthTokenInvalid,
+    NetworkError,
+    WasmNotSupported,
+};
+
+pub fn loadConfig(path: []const u8) PlasmaError!Config {
+    const file = std.fs.cwd().openFile(path, .{}) catch |err| switch (err) {
+        error.FileNotFound => return error.ConfigNotFound,
+        else => return error.ConfigParseError,
+    };
+    defer file.close();
+    // ...
+}
 ```
 
-**Deliverable**: Working configuration system with tests
+**Deliverable**: Error handling foundation that works on native + WASM
 
 ---
 
-## Phase 2: JWT Authentication
+## Phase 2: Allocators & Memory Management
 
-**Goal**: Implement zero-latency JWT validation with RS256
+**Goal**: Master Zig's allocator model - critical for WASM compatibility
+
+**Zig Concepts to Learn**:
+- Allocator interface (`std.mem.Allocator`)
+- `GeneralPurposeAllocator` for debugging
+- `ArenaAllocator` for batch allocations
+- `FixedBufferAllocator` for stack-based allocation
+- WASM page allocator
 
 ### Tasks
-- [ ] Create `auth` module
-- [ ] Implement JWT validation using RS256
-  - [ ] Load public key from file
-  - [ ] Support JWKS URL (optional, future)
-  - [ ] Validate signature
-  - [ ] Validate expiry (`exp` claim)
-  - [ ] Extract claims (customer_id, permissions, etc.)
-- [ ] Implement hot-reload for public key
-  - [ ] File watch or SIGHUP signal handler
-- [ ] Support multiple active keys (identified by `kid`)
-- [ ] Create middleware for HTTP/gRPC servers
-- [ ] Write unit tests with test fixtures (valid/expired/invalid JWTs)
-- [ ] Write integration test with real JWT generation
-- [ ] Add benchmarks to ensure <1ms validation time
 
-**Dependencies**:
-```toml
-jsonwebtoken = "9"
+- [ ] Create `src/allocators.zig` with platform-specific allocators
+- [ ] Implement arena allocator wrapper for request handling
+- [ ] Create memory-bounded allocator for cache limits
+- [ ] Add memory usage tracking
+- [ ] Test with different allocator backends (native vs WASM)
+- [ ] Implement `deinit` patterns consistently
+
+**Example**:
+```zig
+pub const PlatformAllocator = struct {
+    backing: std.mem.Allocator,
+
+    pub fn init() PlatformAllocator {
+        if (builtin.target.isWasm()) {
+            return .{ .backing = std.heap.wasm_allocator };
+        } else {
+            return .{ .backing = std.heap.page_allocator };
+        }
+    }
+};
 ```
 
-**Deliverable**: Fast, secure JWT validation with tests and benchmarks
+**Deliverable**: Memory management that works efficiently on native + WASM
 
 ---
 
-## Phase 3: Storage Abstraction Layer
+## Phase 3: Strings, Slices & Hashing
 
-**Goal**: Create clean abstraction for different storage backends
+**Goal**: Implement content-addressable storage primitives
+
+**Zig Concepts to Learn**:
+- Slices (`[]const u8`, `[]u8`)
+- String handling (Zig strings are just slices)
+- `std.crypto.hash.sha2.Sha256`
+- Hex encoding/decoding
+- Compile-time string operations
 
 ### Tasks
-- [ ] Define `Storage` trait with methods:
-  - [ ] `get(key: &str) -> Result<Option<Vec<u8>>>`
-  - [ ] `put(key: &str, value: Vec<u8>) -> Result<()>`
-  - [ ] `exists(key: &str) -> Result<bool>`
-  - [ ] `delete(key: &str) -> Result<()>`
-  - [ ] `size() -> Result<u64>`
-- [ ] Implement `RocksDBStorage` backend
-  - [ ] Initialize RocksDB with path
-  - [ ] Configure LRU/LFU eviction
-  - [ ] Implement size limits
-  - [ ] Handle errors gracefully
-- [ ] Implement `S3Storage` backend
-  - [ ] Initialize AWS S3 client
-  - [ ] Support custom endpoints (for LocalStack testing)
-  - [ ] Handle prefixes for customer isolation
-  - [ ] Implement retries and error handling
-- [ ] Implement `LayeredStorage` (cascade through multiple backends)
-  - [ ] Try local → upstream → S3
-  - [ ] Write-through to all layers
-  - [ ] Pull and cache on miss
-- [ ] Write unit tests for each storage backend
-- [ ] Write integration tests with real RocksDB and LocalStack
-- [ ] Add metrics hooks (cache hits/misses)
 
-**Dependencies**:
-```toml
-rocksdb = "0.22"
-aws-sdk-s3 = "1"
-aws-config = "1"
+- [ ] Create `src/hash.zig` with SHA256 utilities
+- [ ] Implement `ContentId` type (32-byte hash)
+- [ ] Create hex encoding/decoding functions
+- [ ] Implement hash verification
+- [ ] Add WASM-compatible crypto (use std.crypto, it compiles to WASM)
+- [ ] Benchmark hashing performance native vs WASM
+- [ ] Write comprehensive tests
+
+**Example**:
+```zig
+pub const ContentId = struct {
+    bytes: [32]u8,
+
+    pub fn fromData(data: []const u8) ContentId {
+        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+        hasher.update(data);
+        return .{ .bytes = hasher.finalResult() };
+    }
+
+    pub fn toHex(self: ContentId) [64]u8 {
+        return std.fmt.bytesToHex(self.bytes, .lower);
+    }
+
+    pub fn fromHex(hex: []const u8) !ContentId {
+        var result: ContentId = undefined;
+        _ = try std.fmt.hexToBytes(&result.bytes, hex);
+        return result;
+    }
+};
 ```
 
-**Deliverable**: Working storage layer with RocksDB and S3 support
+**Deliverable**: SHA256 content addressing works on native + WASM
 
 ---
 
-## Phase 4: HTTP REST API Server
+## Phase 4: Structs, Unions & Configuration
 
-**Goal**: Implement HTTP server for Gradle, Nx, and TurboRepo
+**Goal**: Implement configuration system with TOML-like parsing
+
+**Zig Concepts to Learn**:
+- Struct definitions and initialization
+- Tagged unions (`union(enum)`)
+- Default values with `= value`
+- Comptime type reflection
+- JSON parsing with `std.json`
 
 ### Tasks
-- [ ] Choose HTTP framework (`axum` recommended)
-- [ ] Create `http_server` module
-- [ ] Implement routes:
-  - [ ] `GET /cache/:hash` - retrieve artifact
-  - [ ] `PUT /cache/:hash` - store artifact
-  - [ ] `HEAD /cache/:hash` - check existence
-  - [ ] `GET /v8/artifacts/:hash` - TurboRepo specific
-  - [ ] `PUT /v8/artifacts/:hash` - TurboRepo specific
-- [ ] Add JWT authentication middleware
-- [ ] Extract hash from URL, read/write to storage layer
-- [ ] Handle content streaming for large artifacts
-- [ ] Implement proper HTTP status codes (200, 404, 401, 500, etc.)
-- [ ] Add request logging (structured logs)
-- [ ] Add metrics middleware (request count, latency)
-- [ ] Write integration tests for each endpoint
-- [ ] Test with real Gradle/Nx/TurboRepo clients (optional, future)
 
-**Dependencies**:
-```toml
-axum = "0.7"
-tower = "0.5"
-tower-http = { version = "0.5", features = ["trace"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
+- [ ] Create `src/config.zig` with all configuration types
+- [ ] Port `PlasmaConfig`, `CacheConfig`, `UpstreamConfig`, etc.
+- [ ] Implement JSON parsing (TOML parser can come later)
+- [ ] Add environment variable expansion
+- [ ] Implement config merging (CLI > env > file)
+- [ ] Create default configurations
+- [ ] Write serialization/deserialization tests
+
+**Example**:
+```zig
+pub const CacheConfig = struct {
+    dir: []const u8 = ".plasma/cache",
+    max_size: u64 = 10 * 1024 * 1024 * 1024, // 10GB
+    eviction_policy: EvictionPolicy = .lfu,
+    default_ttl_seconds: u64 = 7 * 24 * 60 * 60, // 7 days
+};
+
+pub const EvictionPolicy = enum {
+    lru,
+    lfu,
+    ttl,
+
+    pub fn asStr(self: EvictionPolicy) []const u8 {
+        return switch (self) {
+            .lru => "lru",
+            .lfu => "lfu",
+            .ttl => "ttl",
+        };
+    }
+};
 ```
 
-**Deliverable**: Working HTTP API for cache operations
+**Deliverable**: Configuration system with JSON support
 
 ---
 
-## Phase 5: gRPC Server for Bazel
+## Phase 5: Interfaces & Storage Abstraction
 
-**Goal**: Implement Bazel Remote Execution API
+**Goal**: Create storage trait/interface pattern in Zig
+
+**Zig Concepts to Learn**:
+- Interface pattern with `*anyopaque` + vtable
+- Comptime interface checking
+- Generic functions
+- Type erasure
 
 ### Tasks
-- [ ] Research Bazel Remote Execution API specification
-  - [ ] Download proto files from Bazel repository
-  - [ ] Understand ContentAddressableStorage (CAS)
-  - [ ] Understand ActionCache
-  - [ ] Understand Capabilities service
-- [ ] Set up `tonic` with proto compilation
-- [ ] Create `grpc_server` module
-- [ ] Implement ContentAddressableStorage service
-  - [ ] `FindMissingBlobs`
-  - [ ] `BatchUpdateBlobs`
-  - [ ] `BatchReadBlobs`
-  - [ ] `GetTree` (if needed)
-- [ ] Implement ActionCache service
-  - [ ] `GetActionResult`
-  - [ ] `UpdateActionResult`
-- [ ] Implement Capabilities service
-  - [ ] Return supported features
-- [ ] Add JWT authentication via gRPC metadata
-- [ ] Map gRPC calls to storage layer
-- [ ] Add request logging and metrics
+
+- [ ] Create `src/storage/storage.zig` with Storage interface
+- [ ] Implement interface pattern (vtable approach)
+- [ ] Define methods: `put`, `get`, `exists`, `delete`, `size`, `stats`
+- [ ] Create `StorageStats` type
+- [ ] Write generic test harness for any Storage implementation
+- [ ] Document interface pattern for future implementations
+
+**Example**:
+```zig
+pub const Storage = struct {
+    ptr: *anyopaque,
+    vtable: *const VTable,
+
+    pub const VTable = struct {
+        put: *const fn (*anyopaque, []const u8, []const u8) anyerror!void,
+        get: *const fn (*anyopaque, []const u8) anyerror!?[]const u8,
+        exists: *const fn (*anyopaque, []const u8) anyerror!bool,
+        delete: *const fn (*anyopaque, []const u8) anyerror!void,
+        deinit: *const fn (*anyopaque) void,
+    };
+
+    pub fn put(self: Storage, id: []const u8, data: []const u8) !void {
+        return self.vtable.put(self.ptr, id, data);
+    }
+
+    pub fn get(self: Storage, id: []const u8) !?[]const u8 {
+        return self.vtable.get(self.ptr, id);
+    }
+    // ...
+};
+```
+
+**Deliverable**: Storage interface that backends can implement
+
+---
+
+## Phase 6: In-Memory Storage Backend
+
+**Goal**: Implement in-memory cache (works on native + WASM)
+
+**Zig Concepts to Learn**:
+- `std.HashMap` and `std.AutoHashMap`
+- `std.ArrayList`
+- Ownership semantics with allocators
+- Memory management patterns
+
+### Tasks
+
+- [ ] Create `src/storage/memory.zig`
+- [ ] Implement `MemoryStorage` implementing `Storage` interface
+- [ ] Add LRU eviction support
+- [ ] Add size tracking and limits
+- [ ] Implement access time tracking for LRU
+- [ ] Write tests with eviction scenarios
+- [ ] Benchmark memory usage
+
+**Example**:
+```zig
+pub const MemoryStorage = struct {
+    allocator: std.mem.Allocator,
+    data: std.StringHashMap(Entry),
+    total_bytes: u64,
+    max_bytes: u64,
+
+    const Entry = struct {
+        data: []const u8,
+        access_count: u64,
+        last_access: i64,
+    };
+
+    pub fn init(allocator: std.mem.Allocator, max_bytes: u64) MemoryStorage {
+        return .{
+            .allocator = allocator,
+            .data = std.StringHashMap(Entry).init(allocator),
+            .total_bytes = 0,
+            .max_bytes = max_bytes,
+        };
+    }
+
+    pub fn storage(self: *MemoryStorage) Storage {
+        return .{
+            .ptr = self,
+            .vtable = &vtable,
+        };
+    }
+
+    // ... implement VTable functions
+};
+```
+
+**Deliverable**: Working in-memory cache on native + WASM
+
+---
+
+## Phase 7: Filesystem Storage Backend (Native Only)
+
+**Goal**: Implement filesystem-based storage for native targets
+
+**Zig Concepts to Learn**:
+- `std.fs` for file operations
+- Directory iteration
+- File permissions
+- Conditional compilation with `builtin.target`
+
+### Tasks
+
+- [ ] Create `src/storage/filesystem.zig`
+- [ ] Implement `FilesystemStorage` implementing `Storage` interface
+- [ ] Use content-addressed directory structure (like Git)
+- [ ] Add atomic writes (write to temp, then rename)
+- [ ] Implement metadata storage (access times, sizes)
+- [ ] Add eviction based on directory scanning
+- [ ] Compile-time disable for WASM target
 - [ ] Write integration tests
-- [ ] Test with real Bazel client (optional, future)
 
-**Dependencies**:
-```toml
-tonic = "0.12"
-prost = "0.13"
-tonic-build = "0.12"
+**Example directory structure**:
+```
+.plasma/cache/
+  ab/
+    cdef1234...  (blob content)
+  12/
+    3456abcd...
+  metadata.json  (access times, stats)
 ```
 
-**Deliverable**: Working gRPC API for Bazel
+**Deliverable**: Filesystem storage for native, graceful fallback for WASM
 
 ---
 
-## Phase 6: Metrics & Observability
+## Phase 8: Platform Abstraction Layer
 
-**Goal**: Expose metrics endpoint for Tuist to consume
+**Goal**: Create unified platform abstraction for native vs WASM
+
+**Zig Concepts to Learn**:
+- `@import("builtin")` for target detection
+- Conditional compilation
+- Comptime branching
+- Platform-specific code organization
 
 ### Tasks
-- [ ] Create `metrics` module
-- [ ] Define metrics to track:
-  - [ ] Cache hits/misses (counter)
-  - [ ] Storage bytes used (gauge)
-  - [ ] Object count (gauge)
-  - [ ] Request latency (histogram, p50/p95/p99)
-  - [ ] Upload/download bandwidth (counter)
-  - [ ] Error rate by type (counter)
-  - [ ] Active connections (gauge)
-  - [ ] Evictions (counter)
-- [ ] Implement metrics collection with `prometheus` crate
-- [ ] Add `GET /metrics` endpoint (Prometheus format)
-- [ ] Instrument HTTP and gRPC servers
-- [ ] Instrument storage layer
-- [ ] Add structured logging with `tracing`
-- [ ] Write tests for metrics accuracy
-- [ ] Document metrics in README
 
-**Dependencies**:
-```toml
-prometheus = "0.13"
-lazy_static = "1.4"  # for global metrics
+- [ ] Create `src/platform/mod.zig`
+- [ ] Create `src/platform/native.zig`
+- [ ] Create `src/platform/wasm.zig`
+- [ ] Abstract: storage, networking, time, random
+- [ ] Implement WASM stubs that call JavaScript
+- [ ] Define `extern` functions for JS callbacks
+- [ ] Create JS glue code for WASM
+- [ ] Test platform detection at compile time
+
+**Example**:
+```zig
+const builtin = @import("builtin");
+
+pub const platform = if (builtin.target.cpu_arch == .wasm32)
+    @import("platform/wasm.zig")
+else
+    @import("platform/native.zig");
+
+// Usage:
+const storage = platform.createDefaultStorage(allocator);
 ```
 
-**Deliverable**: Prometheus-compatible metrics endpoint
+**Deliverable**: Clean platform abstraction compiling to native + WASM
 
 ---
 
-## Phase 7: Integration & End-to-End Testing
+## Phase 9: HTTP Server (Native)
 
-**Goal**: Ensure all components work together correctly
+**Goal**: Implement HTTP server for cache endpoints
+
+**Zig Concepts to Learn**:
+- `std.http.Server`
+- Request/response handling
+- Headers and body parsing
+- Connection handling
+- Async patterns (or threaded model)
 
 ### Tasks
-- [ ] Write end-to-end tests:
-  - [ ] Start Plasma server (HTTP + gRPC)
-  - [ ] Authenticate with JWT
-  - [ ] Store artifact via HTTP
-  - [ ] Retrieve artifact via HTTP
-  - [ ] Verify layered storage (local → upstream → S3)
-  - [ ] Check metrics endpoint
-- [ ] Test configuration loading (CLI, env, file)
-- [ ] Test JWT expiry and invalid tokens
-- [ ] Test storage backend failures (graceful degradation)
-- [ ] Test with realistic build artifacts (large files, many files)
-- [ ] Performance testing:
-  - [ ] Measure p99 latency for GET/PUT operations
-  - [ ] Measure throughput (requests/second)
-  - [ ] Ensure <10ms p99 for cache hits
-- [ ] Load testing with tools like `wrk` or `k6`
-- [ ] Document testing approach in README
 
-**Deliverable**: Comprehensive test suite with performance benchmarks
+- [ ] Create `src/http/server.zig`
+- [ ] Implement basic HTTP/1.1 server using `std.http`
+- [ ] Add routes: `GET /cache/:hash`, `PUT /cache/:hash`, `HEAD /cache/:hash`
+- [ ] Implement streaming for large artifacts
+- [ ] Add content-type handling
+- [ ] Implement proper HTTP status codes
+- [ ] Add request logging
+- [ ] Write integration tests with real HTTP requests
+- [ ] Benchmark throughput
+
+**Example**:
+```zig
+pub const HttpServer = struct {
+    storage: Storage,
+    server: std.http.Server,
+
+    pub fn handleRequest(self: *HttpServer, request: *std.http.Server.Request) !void {
+        const path = request.target;
+
+        if (std.mem.startsWith(u8, path, "/cache/")) {
+            const hash = path[7..];
+            switch (request.method) {
+                .GET => try self.handleGet(request, hash),
+                .PUT => try self.handlePut(request, hash),
+                .HEAD => try self.handleHead(request, hash),
+                else => try request.respond(.method_not_allowed, .{}),
+            }
+        }
+    }
+};
+```
+
+**Deliverable**: Working HTTP server compatible with Gradle/Nx/TurboRepo
 
 ---
 
-## Phase 8: Docker & Deployment
+## Phase 10: HTTP Client & Fetch Abstraction
 
-**Goal**: Make Plasma easy to deploy
+**Goal**: Implement HTTP client that works on native (sockets) and WASM (fetch)
+
+**Zig Concepts to Learn**:
+- `std.http.Client` for native
+- WASM extern functions for JavaScript interop
+- Async/callback patterns for WASM
 
 ### Tasks
-- [ ] Create `Dockerfile` with multi-stage build
-  - [ ] Build stage (Rust compilation)
-  - [ ] Runtime stage (minimal image with binary)
-- [ ] Create `docker-compose.yml` for local testing
-  - [ ] Plasma service
-  - [ ] LocalStack (S3 emulation)
-  - [ ] Example configuration
-- [ ] Write deployment guide for different scenarios:
-  - [ ] Docker on single host
-  - [ ] Kubernetes (basic manifests)
-  - [ ] Cloud providers (AWS, GCP, Azure notes)
-- [ ] Add health check endpoint (`GET /health`)
-- [ ] Add readiness check endpoint (`GET /ready`)
-- [ ] Document environment variables for deployment
-- [ ] Test deployment in Docker locally
 
-**Deliverable**: Production-ready Docker image and deployment docs
+- [ ] Create `src/http/client.zig` with platform abstraction
+- [ ] Implement native HTTP client using `std.http.Client`
+- [ ] Implement WASM HTTP client using extern JS fetch
+- [ ] Create JS glue code: `plasma_fetch(url, method, body) -> Promise`
+- [ ] Handle streaming responses
+- [ ] Add timeout and retry logic
+- [ ] Test upstream cache fetching
+
+**WASM JS Interop**:
+```javascript
+// plasma-wasm.js
+const wasmInstance = await WebAssembly.instantiate(wasmBytes, {
+    env: {
+        plasma_fetch: (urlPtr, urlLen, methodPtr, methodLen, callback) => {
+            const url = readString(urlPtr, urlLen);
+            const method = readString(methodPtr, methodLen);
+            fetch(url, { method }).then(response => {
+                // Call back into WASM with result
+            });
+        }
+    }
+});
+```
+
+**Deliverable**: HTTP client working on native + browser
 
 ---
 
-## Phase 9: Documentation & Polish
+## Phase 11: CLI Argument Parsing
 
-**Goal**: Make Plasma easy to understand and use
+**Goal**: Implement command-line interface for native binary
+
+**Zig Concepts to Learn**:
+- `std.process.args()`
+- String parsing and matching
+- Comptime string handling
+- Help text generation
 
 ### Tasks
+
+- [ ] Create `src/cli.zig`
+- [ ] Implement argument parser (or use zig-clap library)
+- [ ] Define commands: `daemon`, `server`, `run`, `cache`, `config`, `health`
+- [ ] Add flag parsing: `--config`, `--log-level`, `--port`
+- [ ] Generate help text
+- [ ] Handle subcommands
+- [ ] Write tests for argument parsing
+
+**Example**:
+```zig
+pub const Command = union(enum) {
+    daemon: DaemonArgs,
+    server: ServerArgs,
+    run: RunArgs,
+    config: ConfigCommand,
+    health: HealthArgs,
+    help,
+    version,
+};
+
+pub fn parseArgs(allocator: std.mem.Allocator) !Command {
+    var args = std.process.args();
+    _ = args.skip(); // skip executable name
+
+    const cmd = args.next() orelse return .help;
+
+    if (std.mem.eql(u8, cmd, "daemon")) {
+        return .{ .daemon = try parseDaemonArgs(allocator, &args) };
+    }
+    // ...
+}
+```
+
+**Deliverable**: Full CLI matching Rust version's capabilities
+
+---
+
+## Phase 12: Logging & Observability
+
+**Goal**: Implement structured logging with platform-specific output
+
+**Zig Concepts to Learn**:
+- `std.log` framework
+- Custom log functions
+- Comptime log level filtering
+- Writer abstraction
+
+### Tasks
+
+- [ ] Create `src/logging.zig`
+- [ ] Implement structured logger with JSON output option
+- [ ] Add log levels: debug, info, warn, error
+- [ ] Platform-specific output (stdout for native, console.log for WASM)
+- [ ] Add request context (request ID, duration)
+- [ ] Create `[plasma]` prefix formatting
+- [ ] Add metrics collection hooks
+
+**Example**:
+```zig
+pub fn log(
+    comptime level: std.log.Level,
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const prefix = "[plasma] ";
+    const level_str = switch (level) {
+        .debug => "DEBUG",
+        .info => "INFO ",
+        .warn => "WARN ",
+        .err => "ERROR",
+    };
+
+    if (builtin.target.cpu_arch == .wasm32) {
+        // Call JS console.log
+        wasmLog(level_str ++ " " ++ prefix ++ format, args);
+    } else {
+        std.debug.print(level_str ++ " " ++ prefix ++ format ++ "\n", args);
+    }
+}
+```
+
+**Deliverable**: Consistent logging across native + WASM
+
+---
+
+## Phase 13: gRPC Protocol Buffers
+
+**Goal**: Implement Protocol Buffer parsing/serialization for Bazel API
+
+**Zig Concepts to Learn**:
+- Binary protocol parsing
+- Comptime code generation
+- Packed struct layout
+- Varint encoding
+
+### Tasks
+
+- [ ] Create `src/proto/mod.zig`
+- [ ] Implement varint encoding/decoding
+- [ ] Implement protobuf wire format parser
+- [ ] Port Bazel proto definitions to Zig structs
+- [ ] Create serialization functions
+- [ ] Handle streaming messages
+- [ ] Write fuzz tests for parsing
+- [ ] Consider using protobuf Zig library if mature
+
+**Example**:
+```zig
+pub const Digest = struct {
+    hash: []const u8,
+    size_bytes: i64,
+
+    pub fn encode(self: Digest, writer: anytype) !void {
+        try writeField(writer, 1, .len_delimited, self.hash);
+        try writeField(writer, 2, .varint, self.size_bytes);
+    }
+
+    pub fn decode(reader: anytype) !Digest {
+        var result: Digest = undefined;
+        while (reader.next()) |field| {
+            switch (field.number) {
+                1 => result.hash = try field.readBytes(),
+                2 => result.size_bytes = try field.readVarint(),
+                else => try field.skip(),
+            }
+        }
+        return result;
+    }
+};
+```
+
+**Deliverable**: Protobuf codec for Bazel Remote Execution API
+
+---
+
+## Phase 14: gRPC/HTTP2 Transport
+
+**Goal**: Implement gRPC transport for Bazel compatibility
+
+**Zig Concepts to Learn**:
+- HTTP/2 framing
+- gRPC wire format
+- Stream multiplexing
+- Header compression (HPACK)
+
+### Tasks
+
+- [ ] Create `src/grpc/transport.zig`
+- [ ] Implement HTTP/2 frame parsing (or use library)
+- [ ] Implement gRPC framing (length-prefixed messages)
+- [ ] Handle unary and streaming RPCs
+- [ ] Implement ContentAddressableStorage service
+- [ ] Implement ActionCache service
+- [ ] For WASM: implement gRPC-Web (HTTP/1.1 based)
+- [ ] Write integration tests with Bazel client
+
+**Deliverable**: gRPC server compatible with Bazel
+
+---
+
+## Phase 15: IndexedDB Storage (WASM/Browser)
+
+**Goal**: Implement browser-based persistent storage using IndexedDB
+
+**Zig Concepts to Learn**:
+- WASM extern functions
+- Async patterns in Zig
+- JavaScript Promise interop
+
+### Tasks
+
+- [ ] Create `src/storage/indexeddb.zig`
+- [ ] Define extern JS functions for IndexedDB operations
+- [ ] Create JS wrapper: `plasma-indexeddb.js`
+- [ ] Implement Storage interface using IndexedDB
+- [ ] Handle async nature of IndexedDB (callback-based)
+- [ ] Add size quota management
+- [ ] Test in browser environment
+
+**JS Wrapper**:
+```javascript
+// plasma-indexeddb.js
+class PlasmaIndexedDB {
+    constructor(dbName = 'plasma-cache') {
+        this.db = null;
+        this.dbName = dbName;
+    }
+
+    async open() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 1);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                db.createObjectStore('blobs', { keyPath: 'id' });
+            };
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve();
+            };
+        });
+    }
+
+    async put(id, data) { /* ... */ }
+    async get(id) { /* ... */ }
+}
+```
+
+**Deliverable**: Persistent browser storage for WASM build
+
+---
+
+## Phase 16: Authentication (JWT)
+
+**Goal**: Implement JWT validation with RS256
+
+**Zig Concepts to Learn**:
+- Base64 decoding
+- RSA signature verification
+- JSON parsing for claims
+- Cryptographic operations
+
+### Tasks
+
+- [ ] Create `src/auth/jwt.zig`
+- [ ] Implement Base64URL decoding
+- [ ] Parse JWT structure (header.payload.signature)
+- [ ] Implement RS256 signature verification
+- [ ] Extract and validate claims (exp, sub, etc.)
+- [ ] Support multiple keys (kid lookup)
+- [ ] For WASM: use SubtleCrypto via extern
+- [ ] Add key hot-reload support
+- [ ] Write tests with real JWT tokens
+
+**Deliverable**: Zero-latency JWT validation on native + WASM
+
+---
+
+## Phase 17: Eviction Policies
+
+**Goal**: Implement cache eviction (LRU, LFU, TTL)
+
+**Zig Concepts to Learn**:
+- Priority queues
+- Custom sorting
+- Time handling
+- Concurrent access patterns
+
+### Tasks
+
+- [ ] Create `src/eviction/mod.zig`
+- [ ] Implement LRU eviction (access time based)
+- [ ] Implement LFU eviction (access count based)
+- [ ] Implement TTL eviction (expiration based)
+- [ ] Create eviction coordinator
+- [ ] Add background eviction task
+- [ ] Implement eviction metrics
+- [ ] Test eviction under load
+
+**Deliverable**: Complete eviction system
+
+---
+
+## Phase 18: Service Worker Integration (Browser)
+
+**Goal**: Create Service Worker for browser-based cache interception
+
+**Zig Concepts to Learn**:
+- WASM module structure for Service Workers
+- JavaScript interop for SW events
+
+### Tasks
+
+- [ ] Create `src/wasm/service-worker.zig`
+- [ ] Export WASM functions for fetch interception
+- [ ] Create `plasma-sw.js` Service Worker wrapper
+- [ ] Intercept build tool requests
+- [ ] Route to IndexedDB cache
+- [ ] Handle upstream fallback
+- [ ] Add cache update strategies
+- [ ] Test with real build tools in browser
+
+**Deliverable**: Browser-based cache proxy via Service Worker
+
+---
+
+## Phase 19: P2P Discovery (Native)
+
+**Goal**: Implement mDNS-based peer discovery
+
+**Zig Concepts to Learn**:
+- UDP sockets
+- DNS message format
+- Multicast networking
+- Concurrent peer management
+
+### Tasks
+
+- [ ] Create `src/p2p/discovery.zig`
+- [ ] Implement mDNS client/server
+- [ ] Handle service announcement
+- [ ] Implement peer tracking
+- [ ] Add peer health checking
+- [ ] Handle network interface changes
+- [ ] Write tests with multiple instances
+
+**Deliverable**: Zero-config P2P discovery for local networks
+
+---
+
+## Phase 20: P2P Cache Sharing
+
+**Goal**: Implement peer-to-peer cache sharing protocol
+
+**Zig Concepts to Learn**:
+- Custom binary protocols
+- HMAC authentication
+- Parallel network requests
+
+### Tasks
+
+- [ ] Create `src/p2p/protocol.zig`
+- [ ] Implement P2P cache protocol (Exists, Get, Put)
+- [ ] Add HMAC authentication
+- [ ] Implement parallel peer querying
+- [ ] Add consent system
+- [ ] Create P2P metrics
+- [ ] Write integration tests
+
+**Deliverable**: Complete P2P cache sharing
+
+---
+
+## Phase 21: Build System Adapters
+
+**Goal**: Implement protocol adapters for specific build systems
+
+**Tasks**:
+
+- [ ] **Gradle Adapter** (`src/adapters/gradle.zig`)
+  - HTTP Basic Auth
+  - `/cache/{hash}` endpoints
+
+- [ ] **Nx Adapter** (`src/adapters/nx.zig`)
+  - Bearer token auth
+  - Nx-specific headers
+
+- [ ] **TurboRepo Adapter** (`src/adapters/turborepo.zig`)
+  - `/v8/artifacts/{hash}?teamId=` format
+
+- [ ] **Bazel Adapter** (`src/adapters/bazel.zig`)
+  - gRPC Remote Execution API
+  - CAS + ActionCache services
+
+**Deliverable**: Build system compatibility layer
+
+---
+
+## Phase 22: Recipe Engine
+
+**Goal**: Implement script caching with annotations
+
+**Zig Concepts to Learn**:
+- Process spawning
+- Script parsing
+- Glob pattern matching
+- Archive handling (tar + compression)
+
+### Tasks
+
+- [ ] Create `src/recipe/mod.zig`
+- [ ] Implement KDL-style annotation parser
+- [ ] Implement input file hashing
+- [ ] Implement output archiving
+- [ ] Add environment variable tracking
+- [ ] Create cache key computation
+- [ ] Handle script execution
+- [ ] Write tests for cache hit/miss scenarios
+
+**Deliverable**: Script caching system
+
+---
+
+## Phase 23: JavaScript Recipe Runtime (WASM)
+
+**Goal**: Implement portable JavaScript recipes
+
+**Zig Concepts to Learn**:
+- Embedding JavaScript engines
+- WASM-to-WASM interaction
+- Async JavaScript execution
+
+### Tasks
+
+- [ ] Evaluate JS engine options for Zig (QuickJS bindings?)
+- [ ] Create `src/recipe_portable/mod.zig`
+- [ ] Implement Plasma API bindings for JS
+- [ ] Handle async recipe execution
+- [ ] Create recipe registry client
+- [ ] Test with sample recipes
+
+**Note**: This is complex - may use JavaScript directly in browser WASM builds instead of embedded engine.
+
+**Deliverable**: Cross-platform recipe execution
+
+---
+
+## Phase 24: Hot Reload & Configuration
+
+**Goal**: Implement configuration hot-reload
+
+**Zig Concepts to Learn**:
+- File watching
+- Signal handling
+- Atomic configuration updates
+
+### Tasks
+
+- [ ] Create `src/hot_reload.zig`
+- [ ] Implement file watcher (inotify/kqueue/ReadDirectoryChanges)
+- [ ] Handle SIGHUP for reload trigger
+- [ ] Implement atomic config swap
+- [ ] Add config validation before reload
+- [ ] Test reload under load
+
+**Deliverable**: Zero-downtime configuration updates
+
+---
+
+## Phase 25: Metrics & Prometheus
+
+**Goal**: Implement metrics exposition
+
+**Zig Concepts to Learn**:
+- Counter/gauge/histogram patterns
+- Text formatting
+- Concurrent metric updates
+
+### Tasks
+
+- [ ] Create `src/metrics/mod.zig`
+- [ ] Implement Counter, Gauge, Histogram types
+- [ ] Create Prometheus text format encoder
+- [ ] Add `/metrics` endpoint
+- [ ] Instrument storage, HTTP, cache operations
+- [ ] Test metric accuracy
+
+**Deliverable**: Prometheus-compatible metrics
+
+---
+
+## Phase 26: Full Integration & Testing
+
+**Goal**: End-to-end testing of complete system
+
+### Tasks
+
+- [ ] Create integration test suite
+- [ ] Test native builds with real build systems
+- [ ] Test WASM in actual browser
+- [ ] Performance benchmarking
+- [ ] Memory leak testing
+- [ ] Stress testing
+- [ ] Documentation
+
+**Deliverable**: Production-ready Zig implementation
+
+---
+
+## Phase 27: Documentation & Polish
+
+**Goal**: Complete documentation and release preparation
+
+### Tasks
+
 - [ ] Write comprehensive README
-  - [ ] What is Plasma?
-  - [ ] Quick start guide
-  - [ ] Configuration reference
-  - [ ] API documentation (HTTP and gRPC)
-  - [ ] Deployment guide
-- [ ] Add inline code documentation (rustdoc)
-- [ ] Generate and publish API docs (`cargo doc`)
-- [ ] Create example configurations for each layer
-- [ ] Write troubleshooting guide
-- [ ] Add architecture diagram (optional)
-- [ ] Create CHANGELOG.md for version tracking
-- [ ] Tag v1.0.0 release
+- [ ] Create API documentation
+- [ ] Add inline code comments
+- [ ] Create example configurations
+- [ ] Write migration guide (from Rust version)
+- [ ] Update CLAUDE.md for Zig patterns
+- [ ] Create v1.0.0-zig release
 
-**Deliverable**: Well-documented v1.0.0 release
-
----
-
-## Future Phases (Post v1.0)
-
-### Phase 10: Multi-Region Support
-- [ ] Design replication strategy
-- [ ] Implement cross-region artifact distribution
-- [ ] Add region-aware routing
-- [ ] Test failover scenarios
-
-### Phase 11: Advanced Features
-- [ ] Compression support (gzip, zstd)
-- [ ] Encryption at rest
-- [ ] Distributed tracing (OpenTelemetry)
-- [ ] Cache warming strategies
-- [ ] Intelligent prefetching
-
-### Phase 12: Additional Build Systems
-
-**Tier 1 - High Priority (Common Build Systems)**
-- [ ] TurboRepo support (HTTP REST API)
-  - Protocol: HTTP with Bearer token
-  - Endpoints: `PUT/GET /v8/artifacts/:hash?teamId=<id>`
-  - Documentation: https://turborepo.com/docs/core-concepts/remote-caching#self-hosting
-  - Status: Planned
-- [ ] sccache support (S3 API for Cargo/Rust compiler cache)
-  - Protocol: S3-compatible API
-  - Integration: Via `RUSTC_WRAPPER` environment variable
-  - Documentation: https://github.com/mozilla/sccache
-  - Status: Planned
-
-**Tier 1 - Free via Bazel (gRPC Remote Execution API)**
-- [ ] Buck2 support (FREE - uses Bazel's gRPC RE API)
-- [ ] Pants support (FREE - uses Bazel's gRPC RE API)
-- [ ] Please support (FREE - uses Bazel's gRPC RE API)
-
-**Tier 2 - Recommended (Additional Capabilities)**
-- [ ] ccache support (HTTP API for C/C++ compiler cache)
-  - Status: Recommended
-- [ ] BuildKit support (OCI Registry protocol for container builds)
-  - Protocol: OCI Registry API
-  - Status: Recommended
-
-**Future - Monitoring**
-- [ ] Vite+ support (when available - currently in early access)
-  - Expected: HTTP-based remote cache protocol
-  - Website: https://viteplus.dev
-  - Status: Monitoring (early access)
-- [ ] Rspack support (TBD)
-  - Status: Monitoring
-- [ ] Maven support
-  - Status: To be evaluated
+**Deliverable**: Well-documented Zig release
 
 ---
 
 ## Progress Tracking
 
 ### Completed Phases
-- ✅ None yet (Phase 0 in progress)
+- None yet (Phase 0 starting)
 
 ### Current Phase
-- 🚧 Phase 0: Project Setup (5/7 tasks complete)
-  - ✅ Rust project initialized with Cargo
-  - ✅ mise configuration added for toolchain management (rust + git-cliff)
-  - ✅ CLI structure with clap (help menu working)
-  - ✅ README with build/run instructions
-  - ✅ CI/CD pipeline (GitHub Actions with automated releases)
-  - ⏳ Module structure
-  - ⏳ Development tools
-  - ⏳ License
+- Phase 0: Zig Hello World & Project Setup
 
-### Blocked Items
-- None currently
+### Migration Notes
 
----
+**Key Differences from Rust**:
 
-## Notes & Decisions
+| Aspect | Rust | Zig |
+|--------|------|-----|
+| Memory | Ownership/borrowing | Explicit allocators |
+| Errors | `Result<T, E>` | Error unions `!T` |
+| Async | `async/await` + tokio | Manual or callbacks (WASM) |
+| Build | Cargo | build.zig |
+| Dependencies | crates.io | Zig packages or C libs |
+| Generics | Monomorphization | Comptime functions |
+| Strings | `String`/`&str` | `[]const u8` slices |
 
-### Key Architectural Decisions
-- **Single binary design**: Simplifies deployment and maintenance
-- **JWT with RS256**: Balances security and performance
-- **RocksDB for hot cache**: Best performance/features for frequency-based eviction
-- **S3 for cold storage**: Standard, reliable, cost-effective
-- **Both HTTP and gRPC**: Required for build system compatibility
-- **clap for CLI**: Using derive macros for clean, type-safe argument parsing
-- **mise for toolchain**: Ensures consistent Rust version across developers
+**WASM Compatibility Decisions**:
 
-### Implementation Notes (2025-10-23)
-- CLI structure includes server command with all anticipated flags
-- Chose edition "2021" for Rust (stable, well-supported)
-- Default ports: HTTP 8080, gRPC 9090, metrics 9091
-- Server command ready to accept all configuration options from CLAUDE.md
-- README.md created with emoji sections for better readability
-- GitHub repository description and topics updated for discoverability
-- Added support documentation for sccache (Cargo/Rust compiler cache)
-- Vite+ added as planned future support (currently in early access)
-- CI/CD pipeline configured with GitHub Actions:
-  - CI workflow: fmt, clippy, test, build on all platforms
-  - Release workflow: automated releases using git-cliff with semantic versioning
-  - Multi-platform builds: Linux (x86_64, ARM64, ARMv7 GNU/musl), macOS (x86_64, ARM64), Windows (x86_64, ARM64)
-  - Multiple archive formats: tar.gz, tar.xz, tar.zst for Unix, zip for Windows
-  - SHA256 checksums generated for all artifacts
-  - CHANGELOG.md automatically updated on releases
-
-### Build System Support Status (2025-11-01)
-
-**Currently Implemented:**
-- ✅ **Gradle** - HTTP REST API with Basic Auth or Bearer token
-- ✅ **Bazel** - gRPC Remote Execution API (ContentAddressableStorage, ActionCache)
-- ✅ **Nx** - HTTP REST API with Bearer token
-- ✅ **Xcode** - HTTP REST API (custom implementation)
-
-**Pending Implementation (Prioritized):**
-- ⏳ **TurboRepo** - Tier 1 (HTTP REST, similar to Nx)
-- ⏳ **sccache** - Tier 1 (S3 API for Rust/Cargo)
-- ⏳ **Buck2** - Tier 1 (FREE via Bazel gRPC RE API)
-- ⏳ **Pants** - Tier 1 (FREE via Bazel gRPC RE API)
-- ⏳ **Please** - Tier 1 (FREE via Bazel gRPC RE API)
-- 💡 **ccache** - Tier 2 (HTTP API for C/C++)
-- 💡 **BuildKit** - Tier 2 (OCI Registry for containers)
-- 👀 **Vite+** - Future (monitoring, currently in early access)
-- 👀 **Rspack** - Future (monitoring)
-- 👀 **Maven** - Future (to be evaluated)
-
-### P2P Cache Sharing Status (2025-11-17)
-
-**Implemented:**
-- ✅ **mDNS Discovery** - Zero-configuration peer discovery via mdns-sd
-- ✅ **HMAC Authentication** - Secure authentication using shared secrets
-- ✅ **User Consent System** - System notifications with consent management
-- ✅ **P2P gRPC Protocol** - Efficient binary protocol for cache transfer
-- ✅ **Parallel Peer Querying** - Race all peers for fastest response
-- ✅ **Comprehensive Metrics** - P2P-specific metrics (hits, misses, bandwidth, consent)
-- ✅ **CLI Management** - Commands for list, status, approve, deny, clear
-- ✅ **XDG Compliance** - Consent storage in `~/.local/share/plasma/p2p/`
-
-**Performance:**
-- Local Cache: 0-1ms
-- P2P Peers: 1-5ms (Layer 0.5) ← **NEW!**
-- Regional Cache: 20-50ms
-- S3 Backup: 100-200ms
-
-### Open Questions
-- Should we support custom storage backends via plugins? (Future consideration)
-- What's the optimal default cache size for Layer 1/2? (Tunable, needs testing)
-- Should we implement cache warming on startup? (Post v1.0)
-
-### Performance Targets
-- **Latency**: <10ms p99 for cache hits (local storage)
-- **Throughput**: Handle 1000s of requests/second per instance
-- **JWT validation**: <1ms per token
+1. **No RocksDB**: Use in-memory + IndexedDB for WASM
+2. **No native threads**: Use event loop / Web Workers
+3. **No TCP sockets**: Use Fetch API via JS interop
+4. **No gRPC native**: Use gRPC-Web (HTTP/1.1)
+5. **Crypto**: Use std.crypto (compiles to WASM) or WebCrypto
 
 ---
 
 ## References
 
-- [CLAUDE.md](./CLAUDE.md) - Full architectural documentation
-- [README.md](./README.md) - User-facing documentation
-- [Bazel Remote Execution API](https://bazel.build/remote/rbe)
-- [Gradle Build Cache](https://docs.gradle.org/current/userguide/build_cache.html)
-- [Nx Remote Cache](https://nx.dev/docs/guides/tasks--caching/self-hosted-caching)
-- [TurboRepo Remote Cache](https://turborepo.com/docs/core-concepts/remote-caching)
-- [sccache (Cargo/Rust)](https://github.com/mozilla/sccache)
-- [Vite+](https://viteplus.dev) - In early access
+- [Zig Documentation](https://ziglang.org/documentation/master/)
+- [Zig WASM Guide](https://ziglang.org/documentation/master/#WebAssembly)
+- [Building a Web Server in Zig](https://www.openmymind.net/Building-a-Simple-HTTP-Server-in-Zig/)
+- [Zig Cookbook](https://ziglearn.org/)
+- [WASM and Zig](https://blog.logrocket.com/zig-webassembly-tutorial/)
