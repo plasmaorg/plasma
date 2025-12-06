@@ -4,10 +4,11 @@ lockfile = true
 [env]
 FNOX_AGE_KEY_FILE = "~/.config/fnox/tuist-plasma-age.txt"
 TIPI_HOME_DIR = "{{config_root}}/.tipi-home"
-_.path = './target/release'
+_.path = ['./target/release', './zig/zig-out/bin']
 
 [tools]
 rust = "latest"
+zig = "0.14.0"  # Latest stable - excellent WASM support
 git-cliff = "latest"
 bazel = "9.0.0rc2"  # Includes BAZELRC environment variable support
 gradle = "latest"

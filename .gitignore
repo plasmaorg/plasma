@@ -70,3 +70,7 @@ generated/
 final/
 coverage/
 output/
+
+# Zig
+zig/.zig-cache/
+zig/zig-out/

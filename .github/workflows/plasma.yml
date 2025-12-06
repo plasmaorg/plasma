@@ -160,3 +160,45 @@ jobs:
 
       - name: Build
         run: cargo build --release --all-features
+
+  # Zig Jobs
+  zig-fmt:
+    name: Zig Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.0
+
+      - name: Check formatting
+        working-directory: zig
+        run: zig fmt --check src/
+
+  zig-build:
+    name: Zig Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.0
+
+      - name: Build native
+        working-directory: zig
+        run: zig build
+
+      - name: Build WASM
+        working-directory: zig
+        run: zig build wasm
+
+      - name: Run tests
+        working-directory: zig
+        run: zig build test
